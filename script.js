@@ -132,13 +132,6 @@ function renderAllPieces() {
   drawBoard();
 }
 
-// Helper for smooth rotation with wrap-around
-function lerpAngle(current, target, t) {
-  let delta = target - current;
-  delta = ((delta + Math.PI) % (2 * Math.PI)) - Math.PI;
-  return current + delta * t;
-}
-
 // Draw board
 function drawBoard() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -174,14 +167,12 @@ function drawBoard() {
     const mouseX = dragPos.x - rect.left - mouseOffset.x;
     const mouseY = dragPos.y - rect.top - mouseOffset.y;
 
-    // Smooth rotation update
-    draggingPiece.currentRotation = lerpAngle(draggingPiece.currentRotation, draggingPiece.targetRotation, 0.15);
+    // Instant rotation
+    draggingPiece.currentRotation = draggingPiece.targetRotation;
 
-    // Compute rotation
     const cos = Math.round(Math.cos(draggingPiece.currentRotation));
     const sin = Math.round(Math.sin(draggingPiece.currentRotation));
 
-    // Rotate and normalize dragging piece shape
     const rotatedShape = draggingPiece.shape.map(([x, y]) => [
       x * cos - y * sin,
       x * sin + y * cos
@@ -190,7 +181,6 @@ function drawBoard() {
     const minY = Math.min(...rotatedShape.map(p => p[1]));
     const normalizedShape = rotatedShape.map(([x, y]) => [x - minX, y - minY]);
 
-    // Draw main dragging piece
     normalizedShape.forEach(([dx, dy]) => {
       const x = mouseX + dx * window.CELL_SIZE;
       const y = mouseY + dy * window.CELL_SIZE;
@@ -254,6 +244,7 @@ canvas.addEventListener("mouseup", e => {
       imageObj: draggingPiece.imageObj
     });
   } else if (draggingWrapper) {
+    // Snap back to original panel spot
     draggingWrapper.style.visibility = "visible";
   }
 
@@ -283,16 +274,26 @@ window.addEventListener("load", () => {
   requestAnimationFrame(drawBoard);
 });
 
-// Rotation & Flip keys
+// Rotation & Flip keys (instant)
 window.addEventListener("keydown", e => {
   if (!draggingPiece) return;
-  if (e.key === "r" || e.key === "R") {
-    draggingPiece.targetRotation += Math.PI / 2;
-  } else if (e.key === "f" || e.key === "F") {
+
+  const rotate90 = () => {
+    draggingPiece.currentRotation += Math.PI / 2;
+    draggingPiece.targetRotation = draggingPiece.currentRotation;
+  };
+
+  const flipX = () => {
     const maxX = Math.max(...draggingPiece.shape.map(c => c[0]));
     draggingPiece.shape = draggingPiece.shape.map(([x, y]) => [maxX - x, y]);
-  } else if (e.key === "v" || e.key === "V") {
+  };
+
+  const flipY = () => {
     const maxY = Math.max(...draggingPiece.shape.map(c => c[1]));
     draggingPiece.shape = draggingPiece.shape.map(([x, y]) => [x, maxY - y]);
-  }
+  };
+
+  if (e.key === "r" || e.key === "R") rotate90();
+  else if (e.key === "f" || e.key === "F") flipX();
+  else if (e.key === "v" || e.key === "V") flipY();
 });
