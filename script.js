@@ -263,7 +263,15 @@ window.addEventListener("click",e=>{if(e.target===modal) modal.style.display="no
 window.addEventListener("keydown", e=>{
   if(modal.style.display==="flex") return;
 
-  // Delete highlighted
+  // Delete only the piece being dragged
+  if ((e.key === "Delete" || e.key === "Backspace") && draggingPiece) {
+    if (draggingWrapper) draggingWrapper.style.visibility = "visible";
+    draggingPiece = null;
+    draggingWrapper = null;
+    return;
+  }
+
+  // Delete highlighted piece
   if((e.key==="Delete"||e.key==="Backspace")&&highlightedPieceIndex!==null){
     const removed=placedPieces.splice(highlightedPieceIndex,1)[0];
     highlightedPieceIndex=null;
@@ -294,7 +302,8 @@ window.addEventListener("keydown", e=>{
     return;
   }
 
-  if((e.key==="Delete"||e.key==="Backspace")&&highlightedPieceIndex===null){
+  // Reset board if no piece held or highlighted
+  if((e.key==="Delete"||e.key==="Backspace")&&highlightedPieceIndex===null&&draggingPiece===null){
     document.getElementById("resetBtn").click();
     return;
   }
