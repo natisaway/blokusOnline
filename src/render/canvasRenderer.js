@@ -1,3 +1,4 @@
+// src/render/canvasRenderer.js
 import { BOARD_SIZE } from "../constants.js";
 import { bounds, normalize } from "../utils/geometry.js";
 
@@ -25,12 +26,11 @@ export function createCanvasRenderer(canvas, state) {
 
   //  Draws all placed pieces on the board
   function drawPlaced() {
-    state.placedPieces.forEach((piece, idx) => {
+    (state.placedPieces || []).forEach((piece, idx) => {
       piece.shape.forEach(([dx, dy]) => {
         const x = (piece.origin.x + dx) * state.cellSize;
         const y = (piece.origin.y + dy) * state.cellSize;
 
-      
         ctx.drawImage(
           piece.imageObj,
           0, 0, piece.imageObj.width, piece.imageObj.height,
@@ -56,19 +56,20 @@ export function createCanvasRenderer(canvas, state) {
     });
   }
 
-  //  Renders the piece currently being dragged
+  //  Renders the piece ghost
   function drawDragging() {
     const dp = state.draggingPiece;
-    if (!dp) return;
+    if (!dp || !state.previewOrigin) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = state.dragPos.x - rect.left - state.mouseOffset.x;
-    const mouseY = state.dragPos.y - rect.top - state.mouseOffset.y;
+    const origin = state.previewOrigin;
     const norm = normalize(dp.shape);
 
+    ctx.save();
+    ctx.globalAlpha = 0.75;
+
     norm.forEach(([dx, dy]) => {
-      const x = mouseX + dx * state.cellSize;
-      const y = mouseY + dy * state.cellSize;
+      const x = (origin.x + dx) * state.cellSize;
+      const y = (origin.y + dy) * state.cellSize;
 
       ctx.drawImage(
         dp.imageObj,
@@ -76,10 +77,13 @@ export function createCanvasRenderer(canvas, state) {
         x, y, state.cellSize, state.cellSize
       );
 
-
-      ctx.strokeStyle = "#000";
+      ctx.strokeStyle = state.previewValid ? "#00aa00" : "#cc0000";
+      ctx.lineWidth = 2;
       ctx.strokeRect(x, y, state.cellSize, state.cellSize);
     });
+
+    ctx.restore();
+    ctx.lineWidth = 1;
   }
 
   // Clears and redraws everything

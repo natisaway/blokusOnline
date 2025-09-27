@@ -51,13 +51,16 @@ h1 {
   background: #fff;
   border-radius: 6px;
   box-sizing: border-box;
+  position: relative;
+  z-index: 3;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 #red-panel,
 #blue-panel {
   height: 100%;
   padding: 6px 8px;
-  overflow: hidden;
   display: grid;
   place-items: center;
 }
@@ -68,24 +71,25 @@ h1 {
   width: var(--boardW);
   margin: 0 auto;
   padding: 6px 8px;
-  overflow: hidden;
   display: grid;
   place-items: center;
 }
 
-/* Panel 3x7 grid */
+/* Panel grid (wrapping) */
 .piece-grid {
-  display: grid;
-  grid-template-columns: repeat(7, max-content);
-  grid-auto-rows: max-content;
-  column-gap: 10px; 
-  row-gap: 12px;    
-  align-items: start;
-  justify-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;  
+  align-items: flex-start;
+  justify-content: center;
 }
 
 .piece-wrapper {
   display: inline-block;
+}
+
+.piece-wrapper canvas {
+  display: block;
 }
 
 /* Board */
@@ -98,6 +102,8 @@ h1 {
   min-height: 300px;
   object-fit: contain;
   display: block;
+  position: relative;
+  z-index: 1;
 }
 
 /* Buttons */
@@ -152,3 +158,6 @@ a {
 a:hover {
   text-decoration: underline;
 }
+
+#yellow-panel .piece-grid,
+#green-panel  .piece-grid { padding-bottom: 18px; }

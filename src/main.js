@@ -1,13 +1,14 @@
+// src/main.js
 import { loadTextures } from "./textures.js";
-import { renderAllPieces } from "./render/panelsRenderer.js";
 import { createCanvasRenderer } from "./render/canvasRenderer.js";
+import { renderAllPieces } from "./render/panelsRenderer.js";
+import { subscribe, boardState } from "./state/boardState.js";
 import { solveLayout } from "./layout/responsive.js";
 import { attachCanvasInput } from "./input/dragDrop.js";
 import { attachKeyboard } from "./input/keyboard.js";
-import { boardState } from "./state/boardState.js";
 
 (async function init() {
-  // DOM refs
+  //DOM refs
   const canvas = document.getElementById("board");
   const panels = {
     red: document.getElementById("red-panel"),
@@ -16,7 +17,7 @@ import { boardState } from "./state/boardState.js";
     green: document.getElementById("green-panel"),
   };
 
-  // Modal
+  //modal
   const modal = document.getElementById("instructionsModal");
   document.getElementById("instructionsBtn")
     .addEventListener("click", () => (modal.style.display = "flex"));
@@ -26,44 +27,32 @@ import { boardState } from "./state/boardState.js";
     if (e.target === modal) modal.style.display = "none";
   });
 
-  // Input and rendering bootstrap
+  //input and board renderer
   attachKeyboard(modal);
-  attachCanvasInput(canvas);
+  attachCanvasInput(canvas);           
   createCanvasRenderer(canvas, boardState);
 
   const images = await loadTextures();
 
-  // Drag helper
   function startDragFromPanel(piece, clientX, clientY, offsetX, offsetY, wrapper) {
     boardState.startDrag(piece, clientX, clientY, offsetX, offsetY, wrapper);
   }
-
+  let currentPieceSizes = 14;
   // Layout and first render
   function layout() {
-    // compute sizes, apply canvas, update state
     const pack = solveLayout(canvas, panels, {
       titleEl: document.querySelector("h1"),
       buttonsEl: document.querySelector(".button-container"),
     });
-    boardState.setCellSizes(pack.cellSize, pack.pieceSize);
-
-    // render after size applies
+    if (typeof boardState.setCellSizes === "function") {
+      boardState.setCellSizes(pack.cellSize, pack.pieceSize);
+    }
+    currentPieceSizes = pack.pieceSize;
     requestAnimationFrame(() => {
-      renderAllPieces(panels, pack.panelPieceSizes, images, startDragFromPanel);
+      renderAllPieces(panels, currentPieceSizes, images, startDragFromPanel);
     });
   }
+  subscribe(() => renderAllPieces(panels, currentPieceSizes, images, startDragFromPanel));
 
-  // Events
-  window.addEventListener("resize", layout, { passive: true });
-  document.getElementById("resetBtn").addEventListener("click", () => {
-    boardState.reset();
-    layout();
-  });
-
-  layout(); // initial
-
-  // ensure unfinished drags return to panel
-  window.addEventListener("mouseup", () => {
-    if (boardState.draggingPiece) boardState.cancelDrag();
-  });
+  layout(); 
 })();
