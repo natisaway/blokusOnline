@@ -1,4 +1,3 @@
-// src/main.js
 import { loadTextures } from "./textures.js";
 import { createCanvasRenderer } from "./render/canvasRenderer.js";
 import { renderAllPieces } from "./render/panelsRenderer.js";
@@ -27,18 +26,15 @@ import { attachKeyboard } from "./input/keyboard.js";
     if (e.target === modal) modal.style.display = "none";
   });
 
-  //input and board renderer
+  // input and board renderer
   attachKeyboard(modal);
   attachCanvasInput(canvas);           
   createCanvasRenderer(canvas, boardState);
-
   const images = await loadTextures();
-
   function startDragFromPanel(piece, clientX, clientY, offsetX, offsetY, wrapper) {
     boardState.startDrag(piece, clientX, clientY, offsetX, offsetY, wrapper);
   }
-  let currentPieceSizes = 14;
-  // Layout and first render
+  let currentPieceSizes = 14; 
   function layout() {
     const pack = solveLayout(canvas, panels, {
       titleEl: document.querySelector("h1"),
@@ -52,7 +48,22 @@ import { attachKeyboard } from "./input/keyboard.js";
       renderAllPieces(panels, currentPieceSizes, images, startDragFromPanel);
     });
   }
+
   subscribe(() => renderAllPieces(panels, currentPieceSizes, images, startDragFromPanel));
 
-  layout(); 
+  // Reset button wiring
+  const resetBtn = document.getElementById("resetBtn");
+  if (resetBtn) {
+    resetBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      boardState.cancelDrag?.();
+      boardState.reset();
+      layout();
+    });
+  }
+
+
+  window.addEventListener("resize", () => layout(), { passive: true });
+
+  layout(); // initial
 })();
