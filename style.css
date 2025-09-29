@@ -161,3 +161,55 @@ a:hover {
 
 #yellow-panel .piece-grid,
 #green-panel  .piece-grid { padding-bottom: 18px; }
+
+/* Turn-highlighting: make non-active panels lighter */
+[data-panel] { transition: opacity 120ms ease; }
+[data-panel][data-active="false"] { opacity: 0.35; }
+
+/* Panels: show 'grab' over piece tiles */
+[data-panel] [data-piece] { cursor: grab; }
+
+/* While dragging: force grabbing cursor */
+body.dragging, #board.dragging { cursor: grabbing !important; }
+
+
+/* Turn banner: bigger, bolder, high contrast, no layout shift */
+#turn-banner{
+  position: absolute;
+  z-index: 3;
+  display: inline-block;
+
+  /* size + weight */
+  font-weight: 800;
+  font-size: clamp(16px, 1.35vw + 10px, 24px);
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+
+  /* padding + rounded */
+  padding: 12px 18px;              /* bigger */
+  border-radius: 12px;
+
+  /* visibility */
+  color: #1e293b;                   /* slate-800 */
+  background: #f2f3f5;              /* neutral fallback */
+  box-shadow: 0 4px 14px rgba(0,0,0,.08);  /* subtle lift */
+  border: 1px solid rgba(0,0,0,.08);
+
+  /* behavior */
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Gentle tints by color (kept subtle but clearer) */
+#turn-banner[data-color="blue"]   { background:#e1efff; border-color:#cfe3ff; }
+#turn-banner[data-color="yellow"] { background:#fff1bf; border-color:#ffe7a3; }
+#turn-banner[data-color="red"]    { background:#ffe2e2; border-color:#ffd2d2; }
+#turn-banner[data-color="green"]  { background:#dff8e9; border-color:#c7f0dc; }
+
+#turn-banner .hint {
+  display: block;
+  margin-top: 4px;
+  font-weight: 600;
+  font-size: 0.9em;
+  opacity: 0.85;
+}

@@ -12,30 +12,32 @@ export function attachKeyboard(modalEl) {
         e.key === "Backspace" ||
         e.code === "Backspace";
 
+      // End turn with Enter
+      if (e.key === "Enter") {
+        e.preventDefault();
+        boardState.endTurn?.();
+        return;
+      }
+
       // Return-to-panel shortcuts: Space or Delete/Backspace
       if (isSpace || isDelete) {
         e.preventDefault();
-
-        if (boardState.draggingPiece) {
-          boardState.returnDragging?.();
-          boardState.cancelDrag?.(); 
-        } else {
-          boardState.returnLast?.();
-        }
+        // if dragging from panel, cancel -> panel; if from board, cancel returns to original placement
+        boardState.cancelDrag?.();
         return;
       }
 
       // Only transform while dragging
-      if (!boardState.draggingPiece) return;
-
-      // Rotate: R
-      if (e.key === "r" || e.key === "R") {
-        e.preventDefault();
-        boardState.rotateDraggingCW?.();
+      if (!boardState.draggingPiece) {
         return;
       }
 
-      // Flip: F = Horizontal, V = Vertical
+      // Rotate (R)
+      if (e.key === "r" || e.key === "R") {
+        e.preventDefault();
+        boardState.rotateDragging?.();
+        return;
+      }
       if (e.key === "f" || e.key === "F") {
         e.preventDefault();
         boardState.flipDraggingH?.();
