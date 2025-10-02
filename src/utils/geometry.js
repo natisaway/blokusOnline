@@ -1,18 +1,44 @@
+// src/utils/geometry.js
+// Geometry helpers for piece transforms. All transforms return shapes normalized
+// to a (0,0) top-left origin so they don't drift after multiple operations.
 
-// 90° rotation around original spot
-export const rotate90 = (shape) => shape.map(([x,y]) => [-y, x]);
+// A shape is an array of [x, y] integer tuples, e.g. [[0,0],[1,0],[1,1]]
 
-// Reflections/flipping
-export const flipX = (shape) => { const m = Math.max(...shape.map(s=>s[0])); return shape.map(([x,y]) => [m-x, y]); };
-export const flipY = (shape) => { const m = Math.max(...shape.map(s=>s[1])); return shape.map(([x,y]) => [x, m-y]); };
+// 90° rotation (counter-clockwise) around origin
+export const rotate90 = ([x, y]) => [-y, x];
 
-// Normalize normalization :D
-export const normalize = (shape) => {
-  const minX = Math.min(...shape.map(s=>s[0])); const minY = Math.min(...shape.map(s=>s[1]));
-  return shape.map(([x,y]) => [x-minX, y-minY]);
+// Mirror across X using the shape's own bounds
+export const flipX = (shape) => {
+  const maxX = Math.max(...shape.map(([x]) => x));
+  return shape.map(([x, y]) => [maxX - x, y]);
 };
-// Bounds for shape and layout checks
+
+// Mirror across Y using the shape's own bounds
+export const flipY = (shape) => {
+  const maxY = Math.max(...shape.map(([, y]) => y));
+  return shape.map(([x, y]) => [x, maxY - y]);
+};
+
+// Shift shape so minX/minY become 0
+export const normalize = (shape) => {
+  const minX = Math.min(...shape.map(([x]) => x));
+  const minY = Math.min(...shape.map(([, y]) => y));
+  return shape.map(([x, y]) => [x - minX, y - minY]);
+};
+
+// Apply a single-cell transform function to each cell, then normalize
+export const transform = (shape, fn) => normalize(shape.map(fn));
+
+// (Optional) bounds helper
 export const bounds = (shape) => {
-  const xs = shape.map(s=>s[0]), ys = shape.map(s=>s[1]);
-  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
+  const xs = shape.map(([x]) => x);
+  const ys = shape.map(([, y]) => y);
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+    width: Math.max(...xs) - Math.min(...xs) + 1,
+    height: Math.max(...ys) - Math.min(...ys) + 1,
+  };
 };

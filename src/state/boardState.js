@@ -1,85 +1,122 @@
+// src/state/boardState.js
 import { BOARD_SIZE } from "../constants.js";
 import { BASE_PIECES } from "../pieces.js";
 
-// subscriptions
+/* ---------------- subscription bus ---------------- */
 const listeners = new Set();
-export function subscribe(fn) {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
+export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+function emit() { for (const fn of listeners) { try { fn(); } catch {} } }
+
+/* ---------------- geometry helpers ---------------- */
+// 90° rotations & horizontal flip (keep your handedness)
+const rot90  = ([x,y]) => [ y, -x];
+const rot180 = ([x,y]) => [-x, -y];
+const rot270 = ([x,y]) => [-y,  x];
+const flipH  = ([x,y]) => [-x,  y];
+
+// translate shape so minX/minY become 0 (prevents drift after transforms)
+function translateToOrigin(shape) {
+  const xs = shape.map(([x]) => x);
+  const ys = shape.map(([,y]) => y);
+  const minX = Math.min(...xs), minY = Math.min(...ys);
+  return shape.map(([x,y]) => [x - minX, y - minY]);
 }
-function emit() {
-  for (const fn of listeners) {
-    try { fn(); } catch {}
-  }
+function sortCells(shape) {
+  return shape.slice().sort((a,b) => (a[0]-b[0]) || (a[1]-b[1]));
+}
+function transformNormalize(shape, fn) {
+  // map per-cell transform then normalize & sort for stability
+  return sortCells(translateToOrigin(shape.map(fn)));
+}
+function all8Orientations(shape) {
+  const s0 = shape.map(([x,y]) => [x,y]);
+  const s1 = s0.map(rot90);
+  const s2 = s0.map(rot180);
+  const s3 = s0.map(rot270);
+  const f0 = s0.map(flipH);
+  const f1 = s1.map(flipH);
+  const f2 = s2.map(flipH);
+  const f3 = s3.map(flipH);
+  return [s0,s1,s2,s3,f0,f1,f2,f3];
 }
 
-/* ---------------- Canonicalization & Hashing ----------------
-   We must compare panel inventory pieces with the shape we drag.
-   Drag shapes are normalized in dragDrop.js, so do the same for:
-   - inventory initialization,
-   - comparisons (markPieceUsed),
-   - re-adding (markPieceUnused).
----------------------------------------------------------------- */
-function canonShape(shape) {
-  // translate so minX/minY = 0, then sort
-  const xs = shape.map(([x]) => x);
-  const ys = shape.map(([, y]) => y);
-  const minX = Math.min(...xs), minY = Math.min(...ys);
-  return shape
-    .map(([x, y]) => [x - minX, y - minY])
-    .sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
+/* -------- orientation-invariant canonicalization -------- */
+function canon8(shape) {
+  let best = null, bestKey = null;
+  for (const o of all8Orientations(shape)) {
+    const c = sortCells(translateToOrigin(o));
+    const k = JSON.stringify(c);
+    if (bestKey == null || k < bestKey) { best = c; bestKey = k; }
+  }
+  return best; // array of [x,y], normalized & sorted
 }
-function hashCanon(shape) {
-  return JSON.stringify(canonShape(shape));
+function hash8(shape) { return JSON.stringify(canon8(shape)); }
+function uniqueCanon8(shapes) {
+  const seen = new Set(), out = [];
+  for (const s of shapes) {
+    const k = hash8(s);
+    if (!seen.has(k)) { seen.add(k); out.push(canon8(s)); }
+  }
+  return out;
 }
+
+// For move search: unique set of *actual* orientations (normalized to 0,0)
+function uniqueOrientations(shape) {
+  const seen = new Set(), out = [];
+  for (const o of all8Orientations(shape)) {
+    const n = sortCells(translateToOrigin(o));
+    const k = JSON.stringify(n);
+    if (!seen.has(k)) { seen.add(k); out.push(n); }
+  }
+  return out;
+}
+
+/* -------- placement de-dupe key (absolute cells) -------- */
 function hashPlacement(color, shape, origin) {
-  // absolute occupied cells for this placement
-  const cells = shape
-    .map(([dx, dy]) => [origin.x + dx, origin.y + dy])
-    .sort((a, b) => (a[0]-b[0]) || (a[1]-b[1]));
+  const cells = shape.map(([dx,dy]) => [origin.x + dx, origin.y + dy])
+                     .sort((a,b) => (a[0]-b[0]) || (a[1]-b[1]));
   return `${color}:${JSON.stringify(cells)}`;
 }
 
+/* =========================== STATE =========================== */
 export const boardState = {
+  /* sizing */
   cellSize: 24,
   pieceSize: 14,
-  setCellSizes(cell, piece) {
-    this.cellSize = cell;
-    this.pieceSize = piece;
-    emit();
-  },
+  setCellSizes(cell, piece) { this.cellSize = cell; this.pieceSize = piece; emit(); },
 
-  // inventory (panel) — store as CANONICAL from the start
+  /* inventory (panel) — store unique, orientation-invariant canonical shapes */
   availablePieces: {
-    yellow: BASE_PIECES.map(s => canonShape(s)),
-    red:    BASE_PIECES.map(s => canonShape(s)),
-    blue:   BASE_PIECES.map(s => canonShape(s)),
-    green:  BASE_PIECES.map(s => canonShape(s)),
+    yellow: uniqueCanon8(BASE_PIECES),
+    red:    uniqueCanon8(BASE_PIECES),
+    blue:   uniqueCanon8(BASE_PIECES),
+    green:  uniqueCanon8(BASE_PIECES),
   },
 
-  // board placements
+  /* placed on board */
   placedPieces: [],
-  _placedKeys: new Set(), // de-dupe of placements (e.g., fast double click)
+  _placedKeys: new Set(), // guard against double-click duplicate placement
 
-  // drag/ghost state
-  draggingPiece: null,
+  /* drag state */
+  draggingPiece: null,            // {shape, imageObj, color, source: "panel"|"board", originalPlacement?}
   dragPos: { x: 0, y: 0 },
   mouseOffset: { x: 0, y: 0 },
   previewOrigin: null,
   previewValid: false,
 
-  // --- turn state ---
+  /* turn state */
   turnOrder: ["blue", "yellow", "red", "green"],
   currentTurnIndex: 0,
-  get currentPlayer() {
-    return this.turnOrder[this.currentTurnIndex];
-  },
+  get currentPlayer() { return this.turnOrder[this.currentTurnIndex]; },
 
-  // --- per-player progression ---
+  /* per-turn requirement */
+  placedThisTurn: false, // must place at least once before Enter ends turn
+
+  /* progression */
   firstPlaced: { blue: false, yellow: false, red: false, green: false },
   forfeited:   { blue: false, yellow: false, red: false, green: false },
 
-  // start points (grid coords)
+  /* start corners */
   startPoint: {
     red:    { x: 0, y: 0 },
     yellow: { x: BOARD_SIZE - 1, y: 0 },
@@ -87,77 +124,100 @@ export const boardState = {
     blue:   { x: BOARD_SIZE - 1, y: BOARD_SIZE - 1 },
   },
 
-  _allForfeited() {
-    return this.turnOrder.every(c => this.forfeited[c]);
-  },
-  _allFirstPlaced() {
-    return this.turnOrder.every(c => this.firstPlaced[c]);
-  },
-  get inFirstRound() {
-    return !this._allFirstPlaced();
-  },
+  _allForfeited() { return this.turnOrder.every(c => this.forfeited[c]); },
+  _allFirstPlaced() { return this.turnOrder.every(c => this.firstPlaced[c]); },
+  get inFirstRound() { return !this._allFirstPlaced(); },
 
-  endTurn() {
-    const cur = this.currentPlayer;
-    if (!this.firstPlaced[cur]) return; // must place first piece (on start)
-    // advance to next non-forfeited player
+  _advanceToNextPlayer() {
     let next = this.currentTurnIndex;
     for (let i = 0; i < this.turnOrder.length; i++) {
       next = (next + 1) % this.turnOrder.length;
       const color = this.turnOrder[next];
       if (!this.forfeited[color]) {
         this.currentTurnIndex = next;
+        this.placedThisTurn = false; // reset requirement for the new player
         emit();
-        return;
+        return true;
       }
     }
-    this.reset();
+    return false;
   },
 
-  // Forfeit allowed only after round 1 is complete for all
-  forfeitCurrentPlayer() {
+  endTurn() {
+    if (this.draggingPiece) return;          // cannot end while dragging
     const cur = this.currentPlayer;
-    if (!this.firstPlaced[cur]) return;
-    if (!this._allFirstPlaced()) return;
+    if (!this.placedThisTurn) return;        // must have placed this turn
+    if (!this.firstPlaced[cur]) return;      // round 1: first piece must be registered
+    if (!this._advanceToNextPlayer()) this.reset();
+  },
+
+  forfeitCurrentPlayer() {
+    if (this.draggingPiece) return;
+    const cur = this.currentPlayer;
+    if (!this.firstPlaced[cur]) return;      // cannot forfeit before first move
+    if (!this._allFirstPlaced()) return;     // forfeit unlocked after round 1
     if (this.forfeited[cur]) return;
 
     this.cancelDrag?.();
     this.forfeited[cur] = true;
 
-    if (this._allForfeited()) {
-      this.reset();
-      return;
-    }
-
-    // advance to next non-forfeited player
-    let next = this.currentTurnIndex;
-    for (let i = 0; i < this.turnOrder.length; i++) {
-      next = (next + 1) % this.turnOrder.length;
-      const color = this.turnOrder[next];
-      if (!this.forfeited[color]) {
-        this.currentTurnIndex = next;
-        emit();
-        return;
-      }
-    }
-    emit();
+    if (this._allForfeited()) { this.reset(); return; }
+    if (!this._advanceToNextPlayer()) this.reset();
   },
 
+  /* these are assigned by input/dragDrop.js */
   startDrag: () => {},
   cancelDrag: () => {},
 
-  // -------- inventory helpers (always compare/push canonical) ----------
-  markPieceUsed(color, shape) {
-    const key = hashCanon(shape);                 // shape from drag (already canon), hashed
-    const arr = this.availablePieces[color];
-    const idx = arr.findIndex(s => hashCanon(s) === key);
-    if (idx !== -1) arr.splice(idx, 1);           // remove exactly once
-  },
-  markPieceUnused(color, shape) {
-    this.availablePieces[color].push(canonShape(shape));
+  /* allow Delete/Backspace to return dragging piece to panel */
+  returnDraggingToPanel() {
+    const dp = this.draggingPiece;
+    if (!dp) return;
+    if (dp.source === "board") {
+      this.markPieceUnused(dp.color, dp.shape);
+      if (dp.originalPlacement) {
+        const { shape: s, origin: o, color } = dp.originalPlacement;
+        const key = hashPlacement(color, s, o);
+        this._placedKeys.delete(key);
+      }
+    }
+    this.draggingPiece = null;
+    this.previewOrigin = null;
+    this.previewValid = false;
+    emit();
   },
 
-  // ------------------------- rules / geometry --------------------------
+  // Optional remover if using hover-to-delete UX
+  removeAt(gridX, gridY) {
+    const idx = this.placedPieces.findIndex(p =>
+      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gridY)
+    );
+    if (idx === -1) return false;
+    const piece = this.placedPieces[idx];
+    if (piece.color !== this.currentPlayer) return false;
+
+    const key = hashPlacement(piece.color, piece.shape, piece.origin);
+    this._placedKeys.delete(key);
+    this.placedPieces.splice(idx, 1);
+    this.markPieceUnused(piece.color, piece.shape);
+    emit();
+    return true;
+  },
+
+  /* -------- inventory helpers (orientation-invariant) -------- */
+  markPieceUsed(color, shape) {
+    const key = hash8(shape);
+    const arr = this.availablePieces[color];
+    const idx = arr.findIndex(s => hash8(s) === key);
+    if (idx !== -1) arr.splice(idx, 1);
+  },
+  markPieceUnused(color, shape) {
+    const arr = this.availablePieces[color];
+    const k = hash8(shape);
+    if (!arr.some(s => hash8(s) === k)) arr.push(canon8(shape));
+  },
+
+  /* ---------------- placement rules ---------------- */
   canPlace(shape, origin) {
     if (!shape || !origin) return false;
 
@@ -167,17 +227,19 @@ export const boardState = {
       if (x < 0 || y < 0 || x >= BOARD_SIZE || y >= BOARD_SIZE) return false;
     }
 
-    // overlap + edge-adjacency (same color)
+    // overlap + edge adjacency (same color)
     for (const placed of this.placedPieces) {
       for (const [dx, dy] of shape) {
         const x = origin.x + dx, y = origin.y + dy;
+
         // direct overlap
         if (placed.shape.some(([px, py]) => placed.origin.x + px === x && placed.origin.y + py === y)) {
           return false;
         }
+
         // no edge contact with same color
-        const draggingColor = this.draggingPiece?.color;
-        if (placed.color === draggingColor) {
+        const dragColor = this.draggingPiece?.color;
+        if (placed.color === dragColor) {
           if (placed.shape.some(([px, py]) =>
             (Math.abs((placed.origin.x + px) - x) + Math.abs((placed.origin.y + py) - y)) === 1
           )) return false;
@@ -185,18 +247,17 @@ export const boardState = {
       }
     }
 
-    // first piece must cover the start corner
     const color = this.draggingPiece?.color;
     const hasSameColor = this.placedPieces.some(p => p.color === color);
 
+    // first piece must cover the start corner
     if (color && !this.firstPlaced[color] && !hasSameColor) {
       const sp = this.startPoint[color];
-      const coversStart = shape.some(([dx, dy]) => origin.x + dx === sp.x && origin.y + dy === sp.y);
-      if (!coversStart) return false;
-      return true; // corner rule does not apply to first piece
+      const covers = shape.some(([dx,dy]) => origin.x + dx === sp.x && origin.y + dy === sp.y);
+      return covers;
     }
 
-    // later pieces must corner-touch own color (no edge touch)
+    // later pieces must corner-touch own color (but not edge-touch)
     if (color && hasSameColor) {
       let cornerTouch = false;
       for (const placed of this.placedPieces) {
@@ -216,7 +277,6 @@ export const boardState = {
     return true;
   },
 
-  // hover check
   canPickUpAt(gridX, gridY) {
     const idx = this.placedPieces.findIndex(p =>
       p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gridY)
@@ -225,7 +285,6 @@ export const boardState = {
     return this.placedPieces[idx].color === this.currentPlayer;
   },
 
-  // board pickup
   pickUpAt(gridX, gridY) {
     const idx = this.placedPieces.findIndex(p =>
       p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gridY)
@@ -234,21 +293,19 @@ export const boardState = {
     if (this.placedPieces[idx].color !== this.currentPlayer) return null;
 
     const piece = this.placedPieces[idx];
-
-    // clear de-dupe key for this placement so it can be placed again later
     const key = hashPlacement(piece.color, piece.shape, piece.origin);
-    this._placedKeys.delete(key);
+    this._placedKeys.delete(key); // allow re-place
 
     this.placedPieces.splice(idx, 1);
 
     this.draggingPiece = {
-      shape: piece.shape.map(([x, y]) => [x, y]),
+      shape: piece.shape.map(([x,y]) => [x,y]),
       imageObj: piece.imageObj,
       color: piece.color,
       currentRotation: 0,
       source: "board",
       originalPlacement: {
-        shape: piece.shape.map(([x, y]) => [x, y]),
+        shape: piece.shape.map(([x,y]) => [x,y]),
         origin: { ...piece.origin },
         imageObj: piece.imageObj,
         color: piece.color,
@@ -258,7 +315,6 @@ export const boardState = {
     return this.draggingPiece;
   },
 
-  // drop/place
   dropAt(gridX, gridY, shape) {
     const origin = { x: gridX, y: gridY };
     const valid = this.canPlace(shape, origin);
@@ -266,32 +322,26 @@ export const boardState = {
     if (valid && this.draggingPiece) {
       const color = this.draggingPiece.color;
 
-      // de-dupe: prevent identical placement twice (e.g., fast double click)
+      // placement de-dupe (fast double click)
       const placeKey = hashPlacement(color, shape, origin);
       if (this._placedKeys.has(placeKey)) {
-        this.draggingPiece = null;
-        this.previewOrigin = null;
-        this.previewValid = false;
-        emit();
-        return true;
+        this.draggingPiece = null; this.previewOrigin = null; this.previewValid = false; emit(); return true;
       }
       this._placedKeys.add(placeKey);
 
       this.placedPieces.push({
-        shape: shape.map(([x, y]) => [x, y]),
+        shape: shape.map(([x,y]) => [x,y]),
         origin,
         imageObj: this.draggingPiece.imageObj,
         color,
       });
 
-      // Remove from panel only if drag started from panel
       if (this.draggingPiece.source === "panel") {
         this.markPieceUsed(color, this.draggingPiece.shape);
       }
 
-      if (!this.firstPlaced[color]) {
-        this.firstPlaced[color] = true;
-      }
+      if (!this.firstPlaced[color]) this.firstPlaced[color] = true;
+      this.placedThisTurn = true;
 
       this.draggingPiece = null;
       this.previewOrigin = null;
@@ -300,25 +350,17 @@ export const boardState = {
       return true;
     }
 
-    // invalid from board -> revert to original
+    // invalid drop from board -> revert original placement
     if (!valid && this.draggingPiece?.source === "board" && this.draggingPiece.originalPlacement) {
       const { shape: s, origin: o, imageObj, color } = this.draggingPiece.originalPlacement;
       const key = hashPlacement(color, s, o);
       if (!this._placedKeys.has(key)) this._placedKeys.add(key);
-      this.placedPieces.push({
-        shape: s.map(([x, y]) => [x, y]),
-        origin: { ...o },
-        imageObj,
-        color,
-      });
-      this.draggingPiece = null;
-      this.previewOrigin = null;
-      this.previewValid = false;
-      emit();
+      this.placedPieces.push({ shape: s.map(([x,y]) => [x,y]), origin: { ...o }, imageObj, color });
+      this.draggingPiece = null; this.previewOrigin = null; this.previewValid = false; emit();
       return false;
     }
 
-    // invalid from panel -> cancel (returns to panel visually)
+    // invalid drop from panel -> cancel (returns to panel visually)
     this.draggingPiece = null;
     this.previewOrigin = null;
     this.previewValid = false;
@@ -326,37 +368,68 @@ export const boardState = {
     return false;
   },
 
-  // transforms during drag
+  // --- normalize after transforms to keep shapes in local (0,0) frame
   rotateDragging() {
     if (!this.draggingPiece) return;
-    this.draggingPiece.shape = this.draggingPiece.shape.map(([x, y]) => [y, -x]);
+    this.draggingPiece.shape = transformNormalize(this.draggingPiece.shape, rot90);
+    this.previewValid = false;
     emit();
   },
   flipDraggingH() {
     if (!this.draggingPiece) return;
-    this.draggingPiece.shape = this.draggingPiece.shape.map(([x, y]) => [-x, y]);
+    this.draggingPiece.shape = transformNormalize(this.draggingPiece.shape, flipH);
+    this.previewValid = false;
     emit();
   },
   flipDraggingV() {
     if (!this.draggingPiece) return;
-    this.draggingPiece.shape = this.draggingPiece.shape.map(([x, y]) => [x, -y]);
+    this.draggingPiece.shape = transformNormalize(this.draggingPiece.shape, ([x,y]) => [x, -y]);
+    this.previewValid = false;
     emit();
   },
 
+  /* ---------------- queries ---------------- */
+  countPiecesLeft(color) { return this.availablePieces[color]?.length ?? 0; },
+
+  hasAnyMove(color) {
+    const avail = this.availablePieces[color] || [];
+    if (avail.length === 0) return false;
+
+    const prev = this.draggingPiece;
+    try {
+      for (const base of avail) {
+        for (const orient of uniqueOrientations(base)) {
+          this.draggingPiece = { color, shape: orient };
+          const maxDx = Math.max(...orient.map(([x]) => x));
+          const maxDy = Math.max(...orient.map(([,y]) => y));
+          for (let y = 0; y <= BOARD_SIZE - 1 - maxDy; y++) {
+            for (let x = 0; x <= BOARD_SIZE - 1 - maxDx; x++) {
+              if (this.canPlace(orient, { x, y })) return true;
+            }
+          }
+        }
+      }
+      return false;
+    } finally {
+      this.draggingPiece = prev;
+    }
+  },
+
+  /* ---------------- reset ---------------- */
   reset() {
-    this.currentTurnIndex = 0; // Blue starts
+    this.currentTurnIndex = 0;            // Blue starts
+    this.placedThisTurn = false;
     this.firstPlaced = { blue: false, yellow: false, red: false, green: false };
     this.forfeited   = { blue: false, yellow: false, red: false, green: false };
 
     this.placedPieces = [];
     this._placedKeys.clear();
 
-    // Rebuild inventory canonically
     this.availablePieces = {
-      yellow: BASE_PIECES.map(s => canonShape(s)),
-      red:    BASE_PIECES.map(s => canonShape(s)),
-      blue:   BASE_PIECES.map(s => canonShape(s)),
-      green:  BASE_PIECES.map(s => canonShape(s)),
+      yellow: uniqueCanon8(BASE_PIECES),
+      red:    uniqueCanon8(BASE_PIECES),
+      blue:   uniqueCanon8(BASE_PIECES),
+      green:  uniqueCanon8(BASE_PIECES),
     };
 
     this.draggingPiece = null;

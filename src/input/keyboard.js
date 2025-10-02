@@ -1,54 +1,66 @@
+// src/input/keyboard.js
+// Global keyboard bindings (work unless you're typing in an input/textarea).
+// Keys:
+//   R = rotate 90° CCW
+//   F = flip horizontal
+//   V = flip vertical
+//   Enter = end turn
+//   ? or I = open instructions
+//   Esc = close instructions
+
 import { boardState } from "../state/boardState.js";
-export function attachKeyboard(modalEl) {
+
+let bound = false;
+
+function isTyping(el) {
+  if (!el) return false;
+  const t = el.tagName;
+  return t === "INPUT" || t === "TEXTAREA" || el.isContentEditable;
+}
+
+export function attachKeyboard(openInstructions, closeInstructions) {
+  if (bound) return;
+  bound = true;
 
   window.addEventListener(
     "keydown",
     (e) => {
-      const isSpace =
-        e.code === "Space" || e.key === " ";
-      const isDelete =
-        e.key === "Delete" ||
-        e.code === "Delete" ||
-        e.key === "Backspace" ||
-        e.code === "Backspace";
+      if (isTyping(e.target)) return;
 
-      // End turn with Enter
-      if (e.key === "Enter") {
-        e.preventDefault();
-        boardState.endTurn?.();
-        return;
-      }
+      const k = e.key;
 
-      // Return-to-panel shortcuts: Space or Delete/Backspace
-      if (isSpace || isDelete) {
+      if (k === "Enter") {
         e.preventDefault();
-        // if dragging from panel, cancel -> panel; if from board, cancel returns to original placement
-        boardState.cancelDrag?.();
+        boardState.endTurn();
         return;
       }
-
-      // Only transform while dragging
-      if (!boardState.draggingPiece) {
+      if (k === "r" || k === "R") {
+        e.preventDefault();
+        boardState.rotateDragging();
         return;
       }
-
-      // Rotate (R)
-      if (e.key === "r" || e.key === "R") {
+      if (k === "f" || k === "F") {
         e.preventDefault();
-        boardState.rotateDragging?.();
+        boardState.flipDraggingH();
         return;
       }
-      if (e.key === "f" || e.key === "F") {
+      if (k === "v" || k === "V") {
         e.preventDefault();
-        boardState.flipDraggingH?.();
+        boardState.flipDraggingV();
         return;
       }
-      if (e.key === "v" || e.key === "V") {
+      if (k === "?" || k === "i" || k === "I") {
         e.preventDefault();
-        boardState.flipDraggingV?.();
+        openInstructions?.();
         return;
+      }
+      if (k === "Escape") {
+        e.preventDefault();
+        closeInstructions?.();
       }
     },
     { passive: false }
   );
 }
+
+export default attachKeyboard;

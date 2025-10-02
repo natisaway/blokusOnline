@@ -17,7 +17,6 @@ import { attachKeyboard } from "./input/keyboard.js";
     green: document.getElementById("green-panel"),
   };
 
-  const modal = document.getElementById("instructionsModal") || document.body;
   const actionBtn = document.getElementById("resetBtn"); // reused as Reset/Forfeit
 
   // --- Banner host & element (absolute-positioned above Blue) ---
@@ -31,15 +30,64 @@ import { attachKeyboard } from "./input/keyboard.js";
   if (!turnBanner) {
     turnBanner = document.createElement("div");
     turnBanner.id = "turn-banner";
-    // Two-line content (title + hint)
     turnBanner.innerHTML = `Blue’s turn<br><span class="hint">Press Enter when done</span>`;
-    host.appendChild(turnBanner); // positioned via JS
+    host.appendChild(turnBanner);
   }
+
+  // --- Instructions modal helpers ---
+  const modalSeenKey = "blokus.instructions.seen";
+  const modalEl = document.getElementById("instructionsModal");
+
+  function openInstructions() {
+    if (!modalEl) return;
+    modalEl.removeAttribute("hidden");
+    modalEl.setAttribute("aria-hidden", "false");
+    modalEl.style.display = "flex"; // matches CSS centering (flexbox)
+  }
+
+  function closeInstructions() {
+    if (!modalEl) return;
+    modalEl.setAttribute("aria-hidden", "true");
+    modalEl.style.display = "none";
+    modalEl.setAttribute("hidden", "");
+    try { localStorage.setItem(modalSeenKey, "1"); } catch {}
+  }
+
+  (function ensureInstructionsOnce() {
+    if (!modalEl) return;
+
+    // open on first visit
+    let seen = "0";
+    try { seen = localStorage.getItem(modalSeenKey) || "0"; } catch {}
+    if (seen !== "1") openInstructions();
+
+    // close button
+    const closeBtn =
+      modalEl.querySelector("[data-close]") ||
+      modalEl.querySelector(".close") ||
+      modalEl.querySelector("button");
+    if (closeBtn) {
+      closeBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        closeInstructions();
+      });
+    }
+
+    // click backdrop to close
+    modalEl.addEventListener("click", (e) => {
+      if (e.target === modalEl) closeInstructions();
+    });
+
+    // wire footer/toolbar button to always open
+    document.getElementById("instructionsBtn")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      openInstructions();
+    });
+  })();
 
   // --- Helpers ---
   const colorName = (c) => (c ? c.charAt(0).toUpperCase() + c.slice(1) : "");
 
-  // Position the banner centered above the Blue panel with a 10px gap
   function positionBanner() {
     const blue = panels.blue;
     if (!blue || !turnBanner) return;
@@ -56,7 +104,6 @@ import { attachKeyboard } from "./input/keyboard.js";
     turnBanner.style.left = `${Math.round(left)}px`;
   }
 
-  // Forfeit button should only appear AFTER all players placed one piece
   function everyonePlacedFirst() {
     return boardState.turnOrder.every((c) => boardState.firstPlaced[c]);
   }
@@ -66,7 +113,6 @@ import { attachKeyboard } from "./input/keyboard.js";
     const cur = boardState.currentPlayer;
 
     if (everyonePlacedFirst() && boardState.firstPlaced[cur]) {
-      // Show Forfeit only after round 1 is complete for ALL players
       actionBtn.textContent = "Forfeit Turn";
       actionBtn.title = "Skip the rest of your turns in this game";
       actionBtn.onclick = (e) => {
@@ -74,7 +120,6 @@ import { attachKeyboard } from "./input/keyboard.js";
         boardState.forfeitCurrentPlayer();
       };
     } else {
-      // Before everyone places their first piece: keep as Reset
       actionBtn.textContent = "Reset";
       actionBtn.title = "Reset the whole board";
       actionBtn.onclick = (e) => {
@@ -87,19 +132,17 @@ import { attachKeyboard } from "./input/keyboard.js";
   }
 
   // --- Input wiring ---
-  attachKeyboard(modal);
+  attachKeyboard(openInstructions, closeInstructions); // R/F/V/Enter + ?/I + Esc
   attachCanvasInput(canvas);
 
   // --- Renderer + textures ---
   createCanvasRenderer(canvas, boardState);
   const images = await loadTextures();
 
-  // Panels ask us to start drags; we relay to boardState
   function startDragFromPanel(piece, clientX, clientY, offsetX, offsetY, wrapper) {
     boardState.startDrag(piece, clientX, clientY, offsetX, offsetY, wrapper);
   }
 
-  // --- Turn highlighting + banner text/tint + action button mode ---
   function applyTurnStyles() {
     const order = ["blue", "yellow", "red", "green"];
     for (const color of order) {
@@ -115,7 +158,6 @@ import { attachKeyboard } from "./input/keyboard.js";
     turnBanner.innerHTML = `${colorName(cur)}’s turn<br><span class="hint">Press Enter when done</span>`;
     turnBanner.setAttribute("data-color", cur);
     positionBanner();
-
     refreshActionButton();
   }
   applyTurnStyles();
@@ -133,24 +175,20 @@ import { attachKeyboard } from "./input/keyboard.js";
     boardState.setCellSizes?.(pack.cellSize, pack.pieceSize);
     currentPieceSizes = pack.pieceSize;
 
-    // Render panels after layout and ensure banner is placed
     requestAnimationFrame(() => {
       renderAllPieces(panels, currentPieceSizes, images, startDragFromPanel);
       positionBanner();
     });
   }
 
-  // Re-render panels only when NOT dragging (lag guard)
   subscribe(() => {
     if (boardState.draggingPiece) return;
     renderAllPieces(panels, currentPieceSizes, images, startDragFromPanel);
     positionBanner();
   });
 
-  // Initial wiring for the action button
   refreshActionButton();
 
-  // --- Window resize ---
   window.addEventListener(
     "resize",
     () => {
@@ -160,6 +198,5 @@ import { attachKeyboard } from "./input/keyboard.js";
     { passive: true }
   );
 
-  // Initial layout
   layout();
 })();
