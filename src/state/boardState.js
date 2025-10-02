@@ -8,7 +8,7 @@ export function subscribe(fn) { listeners.add(fn); return () => listeners.delete
 function emit() { for (const fn of listeners) { try { fn(); } catch {} } }
 
 /* ---------------- geometry helpers ---------------- */
-// 90° rotations & horizontal flip (keep your handedness)
+// 90° rotations & horizontal flip (consistent with your earlier handedness)
 const rot90  = ([x,y]) => [ y, -x];
 const rot180 = ([x,y]) => [-x, -y];
 const rot270 = ([x,y]) => [-y,  x];
@@ -98,7 +98,7 @@ export const boardState = {
   _placedKeys: new Set(), // guard against double-click duplicate placement
 
   /* drag state */
-  draggingPiece: null,            // {shape, imageObj, color, source: "panel"|"board", originalPlacement?}
+  draggingPiece: null,            // {shape, imageObj, color, source: "panel"|"board", originalPlacement?, wrapperEl?}
   dragPos: { x: 0, y: 0 },
   mouseOffset: { x: 0, y: 0 },
   previewOrigin: null,
@@ -171,6 +171,9 @@ export const boardState = {
 
   /* allow Delete/Backspace to return dragging piece to panel */
   returnDraggingToPanel() {
+    // UI teardown + state cleanup (covers “mouse still thinks it’s dragging”)
+    this.cancelDrag?.();
+
     const dp = this.draggingPiece;
     if (!dp) return;
     if (dp.source === "board") {
@@ -279,7 +282,7 @@ export const boardState = {
 
   canPickUpAt(gridX, gridY) {
     const idx = this.placedPieces.findIndex(p =>
-      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gridY)
+      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gy)
     );
     if (idx === -1) return false;
     return this.placedPieces[idx].color === this.currentPlayer;
@@ -287,7 +290,7 @@ export const boardState = {
 
   pickUpAt(gridX, gridY) {
     const idx = this.placedPieces.findIndex(p =>
-      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gridY)
+      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gy)
     );
     if (idx === -1) return null;
     if (this.placedPieces[idx].color !== this.currentPlayer) return null;

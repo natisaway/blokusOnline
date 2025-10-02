@@ -214,7 +214,7 @@ body.dragging, #board.dragging { cursor: grabbing !important; }
   opacity: 0.85;
 }
 
-/* ===== Instructions Modal ===== */
+/* ===== Instructions Modal (single source of truth) ===== */
 #instructionsModal {
   position: fixed;
   inset: 0;
@@ -225,8 +225,9 @@ body.dragging, #board.dragging { cursor: grabbing !important; }
   z-index: 1000;
 }
 
+/* Visible state toggled by JS */
 #instructionsModal[aria-hidden="false"] {
-  display: flex;               /* show as centered flexbox */
+  display: flex;               /* centered flexbox */
 }
 
 /* Modal card (first child) */
@@ -242,7 +243,7 @@ body.dragging, #board.dragging { cursor: grabbing !important; }
   box-shadow: 0 10px 40px rgba(0,0,0,.3);
 }
 
-/* Close “X” button (optional) */
+/* Close button (optional) */
 #instructionsModal [data-close],
 #instructionsModal .close {
   position: absolute;
@@ -254,3 +255,4 @@ body.dragging, #board.dragging { cursor: grabbing !important; }
   line-height: 1;
   cursor: pointer;
 }
+
