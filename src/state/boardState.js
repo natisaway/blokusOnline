@@ -280,25 +280,27 @@ export const boardState = {
     return true;
   },
 
+  /* ---------------- pickup (FIXED to use gridY) ---------------- */
   canPickUpAt(gridX, gridY) {
     const idx = this.placedPieces.findIndex(p =>
-      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gy)
+      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gridY)
     );
     if (idx === -1) return false;
-    return this.placedPieces[idx].color === this.currentPlayer;
+    return !this.draggingPiece && this.placedPieces[idx].color === this.currentPlayer;
   },
 
   pickUpAt(gridX, gridY) {
     const idx = this.placedPieces.findIndex(p =>
-      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gy)
+      p.shape.some(([dx, dy]) => p.origin.x + dx === gridX && p.origin.y + dy === gridY)
     );
     if (idx === -1) return null;
-    if (this.placedPieces[idx].color !== this.currentPlayer) return null;
-
     const piece = this.placedPieces[idx];
-    const key = hashPlacement(piece.color, piece.shape, piece.origin);
-    this._placedKeys.delete(key); // allow re-place
+    if (piece.color !== this.currentPlayer) return null;
 
+    // allow re-place by clearing the de-dupe key
+    this._placedKeys.delete(hashPlacement(piece.color, piece.shape, piece.origin));
+
+    // remove from board and start a drag from board
     this.placedPieces.splice(idx, 1);
 
     this.draggingPiece = {
