@@ -2,11 +2,7 @@
 import { BOARD_SIZE } from "../constants.js";
 import { boardState } from "../state/boardState.js";
 
-/* ---------------- local normalize (panel tiles -> drag shape) ----------------
-   pieces.js doesn’t export a normalize; this keeps drag shapes tidy.
-   Note: boardState uses orientation-invariant canonicalization for inventory,
-   so using this simple normalize here is fine for dragging math.
--------------------------------------------------------------------------------*/
+/* ---------------- local normalize ---------------- */
 function normalize(shape) {
   const xs = shape.map(([x]) => x);
   const ys = shape.map(([, y]) => y);
@@ -17,7 +13,7 @@ function normalize(shape) {
     .sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]));
 }
 
-/* ---------------- client -> grid helpers ---------------- */
+/* ---------------- helpers ---------------- */
 function clientToGrid(clientX, clientY, wrapperEl, cellSize, mouseOffset) {
   const rect = wrapperEl.getBoundingClientRect();
   const x = Math.floor((clientX - rect.left - mouseOffset.x) / cellSize);
@@ -25,7 +21,6 @@ function clientToGrid(clientX, clientY, wrapperEl, cellSize, mouseOffset) {
   return { x, y };
 }
 
-/* ---------- rAF-coalesced emit to minimize drag lag ---------- */
 let rafPending = false;
 function scheduleEmit() {
   if (rafPending) return;
@@ -36,9 +31,7 @@ function scheduleEmit() {
   });
 }
 
-/* ---------------- live preview updater ----------------
-   No snapping: player can freely move; first-corner rule enforced on drop.
----------------------------------------------------------*/
+/* ---------------- preview updater ---------------- */
 function updatePreview(clientX, clientY) {
   const dp = boardState.draggingPiece;
   if (!dp) {
@@ -56,8 +49,9 @@ function updatePreview(clientX, clientY) {
     boardState.mouseOffset
   );
 
-  // Optional gentle clamp so preview doesn’t jitter outside board too wildly
-  // (kept simple; boardState.canPlace still does hard validation)
+  origin.x = Math.round(origin.x);
+  origin.y = Math.round(origin.y);
+
   const maxCell = BOARD_SIZE - 1;
   if (origin.x < -10) origin.x = -10;
   if (origin.y < -10) origin.y = -10;
@@ -65,8 +59,6 @@ function updatePreview(clientX, clientY) {
   if (origin.y > maxCell + 10) origin.y = maxCell + 10;
 
   boardState.previewOrigin = origin;
-
-  // canPlace looks at boardState.draggingPiece?.color; since dp === draggingPiece, OK.
   boardState.previewValid = boardState.canPlace(dp.shape, origin);
   scheduleEmit();
 }
@@ -89,7 +81,7 @@ function onTouchMove(e) {
   updatePreview(t.clientX, t.clientY);
 }
 
-/* Click-to-place: sticky drag stays until the user clicks the board */
+/* Click-to-place */
 function onBoardClick(e) {
   const dp = boardState.draggingPiece;
   if (!dp) return;
@@ -100,7 +92,7 @@ function onBoardClick(e) {
     e.clientX <= rect.right &&
     e.clientY >= rect.top &&
     e.clientY <= rect.bottom;
-  if (!inside) return; // ignore non-board clicks
+  if (!inside) return;
 
   const origin = clientToGrid(
     e.clientX,
@@ -111,10 +103,8 @@ function onBoardClick(e) {
   );
 
   const can = boardState.canPlace(dp.shape, origin);
-
   if (!can) {
     if (dp.source === "panel") {
-      // Invalid from panel -> return to panel (stop dragging)
       boardState.draggingPiece = null;
       boardState.previewOrigin = null;
       boardState.previewValid = false;
@@ -122,14 +112,12 @@ function onBoardClick(e) {
       cleanup();
       return;
     } else {
-      // Invalid from board -> revert to original placement (dropAt handles revert)
       boardState.dropAt(origin.x, origin.y, dp.shape);
       cleanup();
       return;
     }
   }
 
-  // Valid -> place and end drag
   const placed = boardState.dropAt(origin.x, origin.y, dp.shape);
   if (placed) cleanup();
 }
@@ -140,8 +128,6 @@ function cleanup() {
   window.removeEventListener("touchmove", onTouchMove);
   const boardCanvas = document.getElementById("board");
   boardCanvas?.removeEventListener("click", onBoardClick);
-
-  // restore cursor/state
   document.body.classList.remove("dragging");
   if (boardCanvas) {
     boardCanvas.classList.remove("dragging");
@@ -149,45 +135,45 @@ function cleanup() {
   }
 }
 
-/* ================= Drag API exposed via boardState =================
-   Keeps compatibility with earlier code: panels call startDrag, Escape/Cancel
-   calls cancelDrag, and keyboard handlers can rely on draggingPiece state.
-=====================================================================*/
+/* =================== DRAG ENTRY =================== */
 boardState.startDrag = function startDrag(
   piece,
   clientX,
   clientY,
   offsetX,
-  offsetY /* , wrapperEl */
+  offsetY
 ) {
-  // Enforce turn order when starting a drag from a panel
   const srcColor = piece.color;
   const src = piece.source || "panel";
-  if (src === "panel" && srcColor !== boardState.currentPlayer) {
-    return; // ignore attempts to drag out-of-turn
+
+  // 🧩 1. Enforce turn color
+  if (src === "panel" && srcColor !== boardState.currentPlayer) return;
+
+  // 🧩 2. Prevent multiple placements per turn
+  if (src === "panel" && boardState.turnLocked) {
+    console.warn("You already placed a piece this turn. End turn or undo first.");
+    return;
   }
 
-  // Always anchor to the main board canvas for coordinate conversion
   const boardCanvas = document.getElementById("board");
-
   const normShape = normalize(piece.shape);
+
   boardState.draggingPiece = {
     ...piece,
     shape: normShape,
-    wrapperEl: boardCanvas, // use board canvas as the reference surface
+    wrapperEl: boardCanvas,
     source: piece.source || "panel",
-    originalPlacement: piece.originalPlacement ?? null, // retained if picked from board
+    originalPlacement: piece.originalPlacement ?? null,
   };
+
   boardState.dragPos = { x: clientX, y: clientY };
   boardState.mouseOffset = { x: offsetX, y: offsetY };
   updatePreview(clientX, clientY);
 
-  // Sticky mode: move with mouse/touch, place on CLICK (no mouseup placement)
   window.addEventListener("mousemove", onMouseMove, { passive: false });
   window.addEventListener("touchmove", onTouchMove, { passive: false });
   boardCanvas.addEventListener("click", onBoardClick, { passive: false });
 
-  // Cursor: grabbing while dragging
   document.body.classList.add("dragging");
   boardCanvas.classList.add("dragging");
   boardCanvas.style.cursor = "grabbing";
@@ -195,19 +181,25 @@ boardState.startDrag = function startDrag(
 
 boardState.cancelDrag = cleanup;
 
-/* ================= Panel & Canvas wiring helpers ================= */
+/* ================= Panel & Canvas wiring ================= */
 export function attachPanelDrag(panelEl, color) {
   panelEl.querySelectorAll("[data-piece]").forEach((node) => {
-    // Mouse
     node.addEventListener(
       "mousedown",
       (e) => {
-        // HARD LOCK: ignore other colors on wrong turn
         if (color !== boardState.currentPlayer) {
           e.preventDefault();
           e.stopPropagation();
           return;
         }
+        // 🧩 Block new drags if locked
+        if (boardState.turnLocked) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.warn("You already placed a piece this turn.");
+          return;
+        }
+
         const shape = JSON.parse(node.getAttribute("data-piece"));
         boardState.startDrag(
           { shape, color, imageObj: node, source: "panel" },
@@ -220,13 +212,18 @@ export function attachPanelDrag(panelEl, color) {
       { passive: false }
     );
 
-    // Touch
     node.addEventListener(
       "touchstart",
       (e) => {
         if (color !== boardState.currentPlayer) {
           e.preventDefault();
           e.stopPropagation();
+          return;
+        }
+        if (boardState.turnLocked) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.warn("You already placed a piece this turn.");
           return;
         }
         const t = e.touches[0];
@@ -245,7 +242,7 @@ export function attachPanelDrag(panelEl, color) {
   });
 }
 
-/* ---- Hover cursor on the board: show grab over your pieces ---- */
+/* Hover + pickup logic (unchanged) */
 let hoverRAF = null;
 function setBoardHoverHandlers(canvasEl) {
   function requestHover(e) {
@@ -254,55 +251,34 @@ function setBoardHoverHandlers(canvasEl) {
     if (hoverRAF) return;
     hoverRAF = requestAnimationFrame(() => {
       hoverRAF = null;
-      // If dragging, always show grabbing
       if (boardState.draggingPiece) {
         canvasEl.style.cursor = "grabbing";
         return;
       }
-      const { x: gx, y: gy } = clientToGrid(
-        x,
-        y,
-        canvasEl,
-        boardState.cellSize,
-        { x: 0, y: 0 } // hover has no drag offset
-      );
+      const { x: gx, y: gy } = clientToGrid(x, y, canvasEl, boardState.cellSize, { x: 0, y: 0 });
       const can = boardState.canPickUpAt?.(gx, gy);
       canvasEl.style.cursor = can ? "grab" : "";
     });
   }
-
   canvasEl.addEventListener("mousemove", requestHover, { passive: true });
-  canvasEl.addEventListener(
-    "mouseleave",
-    () => {
-      if (!boardState.draggingPiece) canvasEl.style.cursor = "";
-    },
-    { passive: true }
-  );
+  canvasEl.addEventListener("mouseleave", () => {
+    if (!boardState.draggingPiece) canvasEl.style.cursor = "";
+  }, { passive: true });
 }
 
-/* -------- Board pickups: click a cell with your piece to pick it up -------- */
 export function attachBoardPickup(canvasEl) {
   setBoardHoverHandlers(canvasEl);
 
   canvasEl.addEventListener("mousedown", (e) => {
-    // Don’t start a new pickup while dragging
     if (boardState.draggingPiece) return;
-
     const rect = canvasEl.getBoundingClientRect();
     const cell = boardState.cellSize;
-
-    // Grid coords where the mouse went down
     const gx = Math.floor((e.clientX - rect.left) / cell);
     const gy = Math.floor((e.clientY - rect.top) / cell);
-
     const picked = boardState.pickUpAt(gx, gy);
     if (!picked) return;
-
-    // Preserve exact pixel offset inside the clicked cell
     const offsetX = e.clientX - (rect.left + gx * cell);
     const offsetY = e.clientY - (rect.top + gy * cell);
-
     boardState.startDrag(
       { ...picked, source: "board" },
       e.clientX,
@@ -314,23 +290,16 @@ export function attachBoardPickup(canvasEl) {
 
   canvasEl.addEventListener("touchstart", (e) => {
     if (boardState.draggingPiece) return;
-
     const t = e.touches[0];
     if (!t) return;
-
     const rect = canvasEl.getBoundingClientRect();
     const cell = boardState.cellSize;
-
     const gx = Math.floor((t.clientX - rect.left) / cell);
     const gy = Math.floor((t.clientY - rect.top) / cell);
-
     const picked = boardState.pickUpAt(gx, gy);
     if (!picked) return;
-
-    // Preserve exact pixel offset (touch)
     const offsetX = t.clientX - (rect.left + gx * cell);
     const offsetY = t.clientY - (rect.top + gy * cell);
-
     boardState.startDrag(
       { ...picked, source: "board" },
       t.clientX,
@@ -341,7 +310,6 @@ export function attachBoardPickup(canvasEl) {
   });
 }
 
-/* Optional: convenience helper (not used in sticky mode but kept for parity) */
 export function attachClickToDrop(boardWrapperEl) {
   boardWrapperEl.addEventListener("click", (e) => {
     if (!boardState.draggingPiece) return;
@@ -355,8 +323,6 @@ export function attachClickToDrop(boardWrapperEl) {
   });
 }
 
-/* Named export expected by main.js */
 export function attachCanvasInput(canvasEl) {
-  // Wire board pickups and hover cursor to the canvas.
   attachBoardPickup(canvasEl);
 }

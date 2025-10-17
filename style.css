@@ -3,6 +3,11 @@
   font-family: "Scribble";
   src: url("fonts/scribble.ttf") format("truetype");
 }
+/* new bold-ish handwriting font for color names */
+@font-face {
+  font-family: "ScribbleHand";
+  src: url("fonts/Scribble_Hand.ttf") format("truetype");
+}
 
 html,
 body {
