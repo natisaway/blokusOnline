@@ -8,28 +8,52 @@
 </head>
 <body>
   <h1>Blokus Online</h1>
+  
+  <div id="turnBanner" class="turn-banner hidden">
+    <div class="turn-banner-main">
+      <span id="turnBannerText"></span><br />
+      <small id="turnBannerSub">Click "End Turn" when done</small>
+    </div>
+  </div>
 
-  <!-- Yellow strip (yellow) -->
+  <!-- ===== Player Select Modal ===== -->
+  <div id="playerSelectModal" class="player-select-modal" hidden>
+    <div class="player-select-content">
+      <h2>Select Local Players</h2>
+      <div class="player-buttons">
+        <button data-count="1">1P</button>
+        <button data-count="2">2P</button>
+        <button data-count="3">3P</button>
+        <button data-count="4">4P</button>
+      </div>
+      <button id="closePlayerSelect" class="close-btn">Start Game</button>
+    </div>
+  </div>
+
+  <!-- ===== Top Yellow Panel ===== -->
   <div id="yellow-panel" class="panel strip strip--yellow"></div>
 
-  <!-- Middle: left panel – board – right panel -->
+  <!-- ===== Main Board Layout ===== -->
   <div id="game-container" class="middle">
     <div id="red-panel" class="panel side-panel left-panel"></div>
     <canvas id="board"></canvas>
     <div id="blue-panel" class="panel side-panel right-panel"></div>
   </div>
 
-  <!-- Green strip  -->
+  <!-- ===== Bottom Green Panel ===== -->
   <div id="green-panel" class="panel strip strip--green"></div>
 
-  <!-- Buttons -->
-  <div class="button-container">
-    <button id="resetBtn">Reset Board</button>
-    <button id="instructionsBtn">Instructions</button>
-  </div>
+<!-- ===== Control Buttons ===== -->
+<div class="button-container">
+  <button id="resetBtn">Reset Board</button>
+  <button id="instructionsBtn">Instructions</button>
+  <button id="forfeitBtn" class="confirm-btn">Forfeit Turn</button>
+  <button id="confirmTurnBtn" class="confirm-btn">End Turn</button>
+</div>
 
-  <!-- Instructions -->
-  <div id="instructionsModal" class="modal">
+
+  <!-- ===== Instructions Modal ===== -->
+  <div id="instructionsModal" class="modal" aria-hidden="true">
     <div class="modal-content">
       <span id="closeModal" class="close" aria-label="Close Instructions">&times;</span>
       <h2>Game Instructions</h2>
@@ -40,12 +64,53 @@
         - V to flip a piece vertically<br /><br />
         - Hold a piece and press Delete to return it to your pile<br /><br />
       </p>
-      <a href="https://service.mattel.com/instruction_sheets/BJV44-Eng.pdf" target="_blank" rel="noopener noreferrer">View Instructions PDF</a>
+      <a href="https://service.mattel.com/instruction_sheets/BJV44-Eng.pdf"
+         target="_blank"
+         rel="noopener noreferrer">
+        View Official Rules PDF
+      </a>
     </div>
   </div>
 
-  <!-- IMPORTANT: point to /src -->
-  <script type="module" src="./src/main.js"></script></body>
-  <script type="module" src="src/main.js?v=2025-10-03"></script>
+  <!-- ===== Forfeit Confirmation Modal ===== -->
+<div id="forfeitModal" class="player-select-modal" hidden>
+  <div class="player-select-content">
+    <h2>Forfeit Turn?</h2>
+    <p style="margin-bottom:16px;">Are you sure you want to forfeit your turn?<br/>You won’t be able to play again this game.</p>
+    <div class="player-buttons">
+      <button id="confirmForfeitYes">Yes, Forfeit</button>
+      <button id="confirmForfeitNo">Cancel</button>
+    </div>
+  </div>
+</div>
 
+
+<!-- ===== Score Counter ===== -->
+<div id="scoreBoard" class="scoreboard">
+  <div class="score-item blue">
+    <div class="score-label">Blue</div>
+    <div class="score-value" id="blueScore">89</div>
+    <div class="score-sub">squares left</div>
+  </div>
+  <div class="score-item yellow">
+    <div class="score-label">Yellow</div>
+    <div class="score-value" id="yellowScore">89</div>
+    <div class="score-sub">squares left</div>
+  </div>
+  <div class="score-item red">
+    <div class="score-label">Red</div>
+    <div class="score-value" id="redScore">89</div>
+    <div class="score-sub">squares left</div>
+  </div>
+  <div class="score-item green">
+    <div class="score-label">Green</div>
+    <div class="score-value" id="greenScore">89</div>
+    <div class="score-sub">squares left</div>
+  </div>
+</div>
+
+
+  <script type="module" src="./src/main.js"></script>
+</body>
 </html>
+

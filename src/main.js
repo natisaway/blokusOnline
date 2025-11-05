@@ -1,4 +1,4 @@
-// src/main.js
+import { BOARD_SIZE } from "./constants.js";
 import { loadTextures } from "./textures.js";
 import { createCanvasRenderer } from "./render/canvasRenderer.js";
 import { renderAllPieces } from "./render/panelsRenderer.js";
@@ -6,13 +6,13 @@ import { subscribe, boardState } from "./state/boardState.js";
 import { solveLayout } from "./layout/responsive.js";
 import { attachCanvasInput } from "./input/dragDrop.js";
 import { attachKeyboard } from "./input/keyboard.js";
-import { initScoreCounter } from "./state/scoreCounter.js";
-import { initGameOverModal } from "./state/gameOverModal.js";
+import { aiPlayByStyle } from "./utils/computerAI.js";
 
 (async function init() {
-  // --- DOM refs ---
-  const canvas = document.getElementById("board");
+  console.log("Initializing Blokus...");
 
+/* =========================== UI ELEMENT LAYOUT  =========================== */
+const canvas = document.getElementById("board");
   const panels = {
     red: document.getElementById("red-panel"),
     blue: document.getElementById("blue-panel"),
@@ -20,207 +20,269 @@ import { initGameOverModal } from "./state/gameOverModal.js";
     green: document.getElementById("green-panel"),
   };
 
-  const actionBtn = document.getElementById("resetBtn"); // now forfeit only
+  const btnReset = document.getElementById("resetBtn");
+  const btnInstructions = document.getElementById("instructionsBtn");
+  const btnConfirm = document.getElementById("confirmTurnBtn");
+  const btnForfeit = document.getElementById("forfeitBtn");
 
-  // --- Banner host & element ---
-  const host =
-    panels.blue?.parentElement || canvas?.parentElement || document.body;
-  if (host && getComputedStyle(host).position === "static") {
-    host.style.position = "relative";
-  }
+  const forfeitModal = document.getElementById("forfeitModal");
+  const confirmForfeitYes = document.getElementById("confirmForfeitYes");
+  const confirmForfeitNo = document.getElementById("confirmForfeitNo");
+  const playerSelectModal = document.getElementById("playerSelectModal");
+  const closePlayerSelect = document.getElementById("closePlayerSelect");
 
-  let turnBanner = document.getElementById("turn-banner");
-  if (!turnBanner) {
-    turnBanner = document.createElement("div");
-    turnBanner.id = "turn-banner";
-    turnBanner.innerHTML = `Blue’s turn<br><span class="hint">Press Enter when done</span>`;
-    host.appendChild(turnBanner);
-  }
+  /* =========================== PLAYER COUNT SELECTION MODAL  =========================== */
+  function setupPlayerModal() {
+    if (!playerSelectModal) return;
+    playerSelectModal.hidden = false;
 
-  // --- Instructions modal helpers ---
-  const modalSeenKey = "blokus.instructions.seen";
-  const modalEl = document.getElementById("instructionsModal");
+    const playerButtons = playerSelectModal.querySelectorAll("button[data-count]");
+    playerButtons.forEach((b) => b.classList.remove("active"));
+    const firstBtn = playerSelectModal.querySelector('button[data-count="1"]');
+    if (firstBtn) firstBtn.classList.add("active");
 
-  function openInstructions() {
-    if (!modalEl) return;
-    modalEl.removeAttribute("hidden");
-    modalEl.setAttribute("aria-hidden", "false");
-    modalEl.style.display = "flex";
-  }
+    closePlayerSelect.replaceWith(closePlayerSelect.cloneNode(true));
+    const newCloseBtn = document.getElementById("closePlayerSelect");
 
-  function closeInstructions() {
-    if (!modalEl) return;
-    modalEl.setAttribute("aria-hidden", "true");
-    modalEl.style.display = "none";
-    modalEl.setAttribute("hidden", "");
-    try { localStorage.setItem(modalSeenKey, "1"); } catch {}
-  }
-
-  function bindInstructionTriggers() {
-    const clickOpen = (e) => { e.preventDefault(); openInstructions(); };
-    const direct =
-      document.getElementById("instructionsBtn") ||
-      document.querySelector('[data-open="instructions"]') ||
-      Array.from(document.querySelectorAll("button, a")).find((el) => {
-        const t = (el.textContent || "").trim();
-        const id = el.id || "";
-        const cls = el.className || "";
-        return /instructions/i.test(t) || /instruction/i.test(id) || /instruction/i.test(cls);
-      });
-
-    if (direct && !direct.__instrBound) {
-      direct.addEventListener("click", clickOpen);
-      direct.__instrBound = true;
-    }
-
-    if (!document.__instrDelegated) {
-      document.addEventListener("click", (e) => {
-        const el = e.target.closest("button, a");
-        if (!el) return;
-        const t = (el.textContent || "").trim();
-        const id = el.id || "";
-        const cls = el.className || "";
-        if (/instructions/i.test(t) || /instruction/i.test(id) || /instruction/i.test(cls)) {
-          e.preventDefault();
-          openInstructions();
-        }
-      });
-      document.__instrDelegated = true;
-    }
-  }
-
-  (function ensureInstructionsOnce() {
-    if (!modalEl) return;
-    let seen = "0";
-    try { seen = localStorage.getItem(modalSeenKey) || "0"; } catch {}
-    if (seen !== "1") openInstructions();
-
-    const closeBtn =
-      modalEl.querySelector("[data-close]") ||
-      modalEl.querySelector(".close") ||
-      modalEl.querySelector("button.close");
-    if (closeBtn && !closeBtn.__instrCloseBound) {
-      closeBtn.addEventListener("click", (e) => { e.preventDefault(); closeInstructions(); });
-      closeBtn.__instrCloseBound = true;
-    }
-
-    if (!modalEl.__instrBackdropBound) {
-      modalEl.addEventListener("click", (e) => {
-        if (e.target === modalEl) closeInstructions();
-      });
-      modalEl.__instrBackdropBound = true;
-    }
-  })();
-
-  bindInstructionTriggers();
-  document.addEventListener("DOMContentLoaded", bindInstructionTriggers);
-
-  // --- Keyboard wiring ---
-  attachKeyboard(openInstructions, closeInstructions);
-
-  // --- Helpers ---
-  const colorName = (c) => (c ? c.charAt(0).toUpperCase() + c.slice(1) : "");
-
-  // Position the banner centered above Blue panel
-  function positionBanner() {
-    const blue = panels.blue;
-    if (!blue || !turnBanner) return;
-
-    const blueRect = blue.getBoundingClientRect();
-    const hostRect = host.getBoundingClientRect();
-
-    const gap = 10;
-    const top = blueRect.top - hostRect.top - turnBanner.offsetHeight - gap;
-    const left =
-      blueRect.left - hostRect.left + (blueRect.width - turnBanner.offsetWidth) / 2;
-
-    turnBanner.style.top = `${Math.round(top)}px`;
-    turnBanner.style.left = `${Math.round(left)}px`;
-  }
-
-  // --- Action Button (Forfeit Only) ---
-  function refreshActionButton() {
-    if (!actionBtn) return;
-    const cur = boardState.currentPlayer;
-
-    actionBtn.textContent = "Forfeit Turn";
-    actionBtn.title = "End your participation for the rest of the game";
-    actionBtn.onclick = (e) => {
-      e.preventDefault();
-      boardState.forfeitCurrentPlayer();
-    };
-  }
-
-  // --- Input wiring ---
-  attachCanvasInput(canvas);
-
-  // --- Renderer + textures ---
-  createCanvasRenderer(canvas, boardState);
-  const images = await loadTextures();
-
-  // Panels ask to start drags
-  function startDragFromPanel(piece, clientX, clientY, offsetX, offsetY, wrapper) {
-    boardState.startDrag(piece, clientX, clientY, offsetX, offsetY, wrapper);
-  }
-
-  // --- Turn highlighting + banner ---
-  function applyTurnStyles() {
-    const order = ["blue", "yellow", "red", "green"];
-    for (const color of order) {
-      const el = panels[color];
-      if (!el) continue;
-      const isActive =
-        color === boardState.currentPlayer && !boardState.forfeited[color];
-      el.setAttribute("data-panel", "");
-      el.setAttribute("data-active", isActive ? "true" : "false");
-    }
-
-    const cur = boardState.currentPlayer;
-    turnBanner.innerHTML = `${colorName(cur)}’s turn<br><span class="hint">Press Enter when done</span>`;
-    turnBanner.setAttribute("data-color", cur);
-    positionBanner();
-    refreshActionButton();
-  }
-  applyTurnStyles();
-  subscribe(applyTurnStyles);
-
-  // --- Layout + panel rendering ---
-  let currentPieceSizes = 14;
-
-  function layout() {
-    const pack = solveLayout(canvas, panels, {
-      titleEl: document.querySelector("h1"),
-      buttonsEl: document.querySelector(".button-container"),
+    playerButtons.forEach((btn) => {
+      btn.onclick = () => {
+        const count = parseInt(btn.dataset.count);
+        const colors = ["blue", "yellow", "red", "green"];
+        boardState.localPlayers = colors.slice(0, count);
+        boardState.emit();
+        playerButtons.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+      };
     });
 
-    boardState.setCellSizes?.(pack.cellSize, pack.pieceSize);
-    currentPieceSizes = pack.pieceSize;
-
-    requestAnimationFrame(() => {
-      renderAllPieces(panels, currentPieceSizes, images, startDragFromPanel);
-      positionBanner();
+    newCloseBtn.addEventListener("click", () => {
+      playerSelectModal.hidden = true;
+      startGame();
     });
   }
+
+  boardState.localPlayers = ["blue"];
+  boardState.emit();
+  setupPlayerModal();
+
+    /* =========================== INITIAL RENDER + TEXTURES  =========================== */
+  const textures = await loadTextures();
+  boardState.textures = textures;
+
+  const renderer = createCanvasRenderer(canvas, boardState);
+  renderAllPieces(panels, boardState.pieceSize, textures, boardState.startDrag);
 
   subscribe(() => {
-    if (boardState.draggingPiece) return;
-    renderAllPieces(panels, currentPieceSizes, images, startDragFromPanel);
-    positionBanner();
+    renderer(boardState);
+    renderAllPieces(
+      panels,
+      boardState.pieceSize,
+      boardState.textures,
+      boardState.startDrag
+    );
   });
 
-  refreshActionButton();
+    /* =========================== RESPONSIVE LAYOUT  =========================== */
+    solveLayout(canvas, panels, {
+    titleEl: document.querySelector("h1"),
+    buttonsEl: document.querySelector(".button-container"),
+  });
 
-  window.addEventListener(
-    "resize",
-    () => {
-      layout();
-      positionBanner();
-    },
-    { passive: true }
+    /* =========================== INPUT HANDLERS  =========================== */
+    attachCanvasInput(canvas, boardState, renderer);
+  attachKeyboard(boardState, renderer);
+  subscribe(() => renderer(boardState));
+
+    /* =========================== SCORE UPDATER  =========================== */
+    function updateScores() {
+    const scoreMap = {
+      blue: document.getElementById("blueScore"),
+      yellow: document.getElementById("yellowScore"),
+      red: document.getElementById("redScore"),
+      green: document.getElementById("greenScore"),
+    };
+
+    Object.keys(scoreMap).forEach((color) => {
+      const remaining = boardState.availablePieces[color]
+        .map((p) => p.length)
+        .reduce((a, b) => a + b, 0);
+      scoreMap[color].textContent = remaining;
+    });
+  }
+  subscribe(() => updateScores());
+
+    /* =========================== TURN BANNER UPDATE  =========================== */
+    function updateTurnBanner(color, customText = null) {
+    const banner = document.getElementById("turnBanner");
+    const text = document.getElementById("turnBannerText");
+    const sub = document.getElementById("turnBannerSub");
+    if (!banner || !text) return;
+
+    banner.className = `turn-banner ${color}`;
+    text.textContent = customText || `${color[0].toUpperCase() + color.slice(1)}'s turn`;
+    sub.style.display = boardState.isLocal(color) ? "block" : "none";
+    btnForfeit.style.display = boardState.isLocal(color) ? "inline-block" : "none";
+  }
+
+  function showForfeitMessage(color) {
+    const banner = document.getElementById("turnBanner");
+    const text = document.getElementById("turnBannerText");
+    const sub = document.getElementById("turnBannerSub");
+    if (!banner || !text) return;
+    banner.className = `turn-banner ${color}`;
+    text.textContent = `${color[0].toUpperCase() + color.slice(1)} forfeits`;
+    sub.style.display = "none";
+  }
+
+    /* =========================== TURN FLOW CONTROL  =========================== */
+    const forfeitedPlayers = new Set();
+
+  async function runTurnCycle() {
+    const current = boardState.currentPlayer;
+    if (forfeitedPlayers.has(current)) {
+      boardState.endTurn();
+      return runTurnCycle();
+    }
+
+    updateTurnBanner(current);
+
+    if (boardState.isAI(current)) {
+      const success = aiPlayByStyle(current);
+      if (!success) forfeitedPlayers.add(current);
+      await new Promise((r) => setTimeout(r, 900));
+      boardState.endTurn();
+      return runTurnCycle();
+    }
+
+    updateTurnBanner(current);
+  }
+
+  async function handleEndTurn() {
+    const current = boardState.currentPlayer;
+    if (!boardState.isLocal(current)) return;
+    boardState.endTurn();
+    await runTurnCycle();
+  }
+
+    /* =========================== FORFEIT HANDLER  =========================== */
+    let pendingForfeit = false;
+  async function handleForfeit() {
+    const current = boardState.currentPlayer;
+    if (!boardState.isLocal(current) || pendingForfeit) return;
+    pendingForfeit = true;
+    forfeitModal.hidden = false;
+
+    return new Promise((resolve) => {
+      const confirmYes = () => finish(true);
+      const cancel = () => finish(false);
+      function finish(choice) {
+        forfeitModal.hidden = true;
+        confirmForfeitYes.removeEventListener("click", confirmYes);
+        confirmForfeitNo.removeEventListener("click", cancel);
+        pendingForfeit = false;
+        resolve(choice);
+      }
+      confirmForfeitYes.addEventListener("click", confirmYes);
+      confirmForfeitNo.addEventListener("click", cancel);
+    }).then(async (confirmed) => {
+      if (!confirmed) return;
+
+      forfeitedPlayers.add(current);
+      showForfeitMessage(current);
+
+      const allLocals = boardState.localPlayers;
+      const allForfeited = allLocals.every((p) => forfeitedPlayers.has(p));
+      if (allForfeited) return continueAIOnly();
+
+      await new Promise((r) => setTimeout(r, 800));
+      boardState.endTurn();
+      await runTurnCycle();
+    });
+  }
+
+    /* =========================== AI-AUTOPLAY AFTER LOCAL FORFEIT  =========================== */
+    function continueAIOnly() {
+    btnForfeit.style.display = "none";
+    btnConfirm.disabled = true;
+    updateTurnBanner("blue", "AI autoplay in progress...");
+
+    const activeAIs = boardState.turnOrder.filter(
+      (c) => boardState.isAI(c) && !forfeitedPlayers.has(c)
+    );
+
+    function hasValidMove(color) {
+      const available = boardState.availablePieces[color] || [];
+      for (const shape of available) {
+        for (let y = 0; y < BOARD_SIZE; y++) {
+          for (let x = 0; x < BOARD_SIZE; x++) {
+            if (boardState.canPlace(shape, { x, y }, color)) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function nextAIIndex(currentIndex) {
+      for (let i = 1; i <= activeAIs.length; i++) {
+        const next = (currentIndex + i) % activeAIs.length;
+        const color = activeAIs[next];
+        if (!forfeitedPlayers.has(color)) return next;
+      }
+      return -1;
+    }
+
+    let currentIndex = 0;
+
+    function step() {
+      const color = activeAIs[currentIndex];
+
+      if (forfeitedPlayers.has(color)) {
+        currentIndex = nextAIIndex(currentIndex);
+        return setTimeout(step, 200);
+      }
+
+      if (!hasValidMove(color)) {
+        forfeitedPlayers.add(color);
+        currentIndex = nextAIIndex(currentIndex);
+        return setTimeout(step, 200);
+      }
+
+      boardState.currentTurnIndex = boardState.turnOrder.indexOf(color);
+      updateTurnBanner(color);
+      aiPlayByStyle(color);
+      boardState.emit();
+      currentIndex = nextAIIndex(currentIndex);
+      setTimeout(step, 700);
+    }
+
+    step();
+  }
+
+    /* =========================== BUTTON ACTIONS  =========================== */
+    btnConfirm.addEventListener("click", handleEndTurn);
+  btnForfeit.addEventListener("click", handleForfeit);
+
+    /* =========================== RESET GAME  =========================== */
+    btnReset.addEventListener("click", () => {
+      console.log("Resetting full game...");
+      window.location.reload();
+    });
+    
+
+    /* =========================== INSTRUCTIONS MODAL  =========================== */
+    btnInstructions.addEventListener("click", () =>
+    document.getElementById("instructionsModal")?.setAttribute("aria-hidden", "false")
+  );
+  document.getElementById("closeModal")?.addEventListener("click", () =>
+    document.getElementById("instructionsModal")?.setAttribute("aria-hidden", "true")
   );
 
-  // --- Initialize everything ---
-  layout();
-  initScoreCounter();
-  initGameOverModal(); // 🎉 show modal when all forfeited
+    /* =========================== GAME START  =========================== */
+    function startGame() {
+    forfeitedPlayers.clear();
+    renderer(boardState);
+    updateTurnBanner("blue", "Blue's turn");
+    updateScores();
+    runTurnCycle();
+  }
 })();

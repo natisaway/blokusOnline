@@ -1,82 +1,80 @@
-// src/input/keyboard.js
-// Global keyboard bindings (ignored while typing in inputs/contenteditable).
-// Keys:
-//   R = rotate 90° CCW
-//   F = flip horizontal
-//   V = flip vertical
-//   Delete / Backspace = return currently dragged piece to panel
-//   Enter = end turn
-//   ? or I = open instructions
-//   Esc = close instructions
-
 import { boardState } from "../state/boardState.js";
 
-let bound = false;
 
-function isTyping(el) {
-  if (!el) return false;
-  const t = el.tagName;
-  return t === "INPUT" || t === "TEXTAREA" || el.isContentEditable;
+function applyTransformsFromBase(piece) {
+  if (!piece.originalShape) return piece.shape;
+  const base = JSON.parse(JSON.stringify(piece.originalShape));
+  let shape = base;
+
+  if (piece.flippedH) {
+    const maxX = Math.max(...shape.map(([x]) => x));
+    shape = shape.map(([x, y]) => [maxX - x, y]);
+  }
+  if (piece.flippedV) {
+    const maxY = Math.max(...shape.map(([, y]) => y));
+    shape = shape.map(([x, y]) => [x, maxY - y]);
+  }
+
+  const rot = ((piece.rotation || 0) % 360 + 360) % 360;
+  const turns = Math.round(rot / 90) % 4;
+  for (let i = 0; i < turns; i++) {
+    shape = shape.map(([x, y]) => [-y, x]);
+    const xs = shape.map(([xx]) => xx);
+    const ys = shape.map(([, yy]) => yy);
+    const minX = Math.min(...xs);
+    const minY = Math.min(...ys);
+    shape = shape.map(([xx, yy]) => [xx - minX, yy - minY]);
+  }
+
+  return shape;
 }
 
 export function attachKeyboard(openInstructions, closeInstructions) {
-  if (bound) return;
-  bound = true;
+  window.addEventListener("keydown", (e) => {
+    const dp = boardState.draggingPiece;
+    const key = e.key.toLowerCase();
 
-  window.addEventListener(
-    "keydown",
-    (e) => {
-      if (isTyping(e.target)) return;
+    // instructions
+    if (key === "?" || key === "i") {
+      e.preventDefault();
+      openInstructions?.();
+      return;
+    }
+    if (key === "escape") {
+      e.preventDefault();
+      boardState.cancelDrag?.();
+      return;
+    }
 
-      const k = e.key;
+    if (!dp || !boardState.isLocal(dp.color)) return;
 
-      // --- return piece while dragging ---
-      if (k === "Delete" || k === "Backspace") {
-        if (boardState.draggingPiece) {
-          e.preventDefault();           // prevent browser back nav on Backspace
-          boardState.returnDraggingToPanel();
-        }
-        return;
-      }
-
-      if (k === "Enter") {
+    let changed = false;
+    switch (key) {
+      case "r":
         e.preventDefault();
-        boardState.endTurn();
-        return;
-      }
-
-      if (k === "r" || k === "R") {
+        dp.rotation = ((dp.rotation || 0) + 90) % 360;
+        dp.shape = applyTransformsFromBase(dp);
+        changed = true;
+        break;
+      case "f":
         e.preventDefault();
-        boardState.rotateDragging();
-        return;
-      }
-
-      if (k === "f" || k === "F") {
+        dp.flippedH = !dp.flippedH;
+        dp.shape = applyTransformsFromBase(dp);
+        changed = true;
+        break;
+      case "v":
         e.preventDefault();
-        boardState.flipDraggingH();
-        return;
-      }
-
-      if (k === "v" || k === "V") {
+        dp.flippedV = !dp.flippedV;
+        dp.shape = applyTransformsFromBase(dp);
+        changed = true;
+        break;
+      case "delete":
+      case "backspace":
         e.preventDefault();
-        boardState.flipDraggingV();
-        return;
-      }
-
-      if (k === "?" || k === "i" || k === "I") {
-        e.preventDefault();
-        openInstructions?.();
-        return;
-      }
-
-      if (k === "Escape") {
-        e.preventDefault();
-        closeInstructions?.();
-        return;
-      }
-    },
-    { passive: false }
-  );
+        boardState.cancelDrag?.();
+        changed = true;
+        break;
+    }
+    if (changed) boardState.emit?.();
+  });
 }
-
-export default attachKeyboard;

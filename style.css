@@ -1,21 +1,20 @@
-/* font */
+/* ============================== FONTS ============================== */
 @font-face {
   font-family: "Scribble";
   src: url("fonts/scribble.ttf") format("truetype");
 }
-/* new bold-ish handwriting font for color names */
 @font-face {
   font-family: "ScribbleHand";
   src: url("fonts/Scribble_Hand.ttf") format("truetype");
 }
 
-html,
-body {
+/* ============================== GLOBAL BASE ============================== */
+html, body {
   height: 100%;
   overflow: hidden;
 }
 
-body,h1,h2,h3,p,a,button {
+body, h1, h2, h3, p, a, button {
   font-family: "Scribble", Arial, sans-serif;
   font-weight: bold;
 }
@@ -33,7 +32,7 @@ h1 {
   margin: 8px 16px;
 }
 
-/* Vars */
+/* ============================== LAYOUT VARIABLES ============================== */
 :root {
   --sideW: 22vw;
   --stripH: 110px;
@@ -41,7 +40,7 @@ h1 {
   --boardW: 720px;
 }
 
-/* Middle row */
+/* ============================== MAIN GAME GRID ============================== */
 #game-container {
   display: grid;
   grid-template-columns: minmax(120px, var(--sideW)) var(--boardW) minmax(120px, var(--sideW));
@@ -51,7 +50,7 @@ h1 {
   justify-content: center;
 }
 
-/* Panel positioning */
+/* ============================== PANELS ============================== */
 .panel {
   background: #fff;
   border-radius: 6px;
@@ -80,11 +79,10 @@ h1 {
   place-items: center;
 }
 
-/* Panel grid (wrapping) */
 .piece-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 12px;  
+  gap: 10px 12px;
   align-items: flex-start;
   justify-content: center;
 }
@@ -92,12 +90,26 @@ h1 {
 .piece-wrapper {
   display: inline-block;
 }
-
 .piece-wrapper canvas {
   display: block;
 }
 
-/* Board */
+/* panel state + cursor */
+[data-panel] {
+  transition: opacity 120ms ease;
+}
+[data-panel][data-active="false"] {
+  opacity: 0.35;
+}
+[data-panel] [data-piece] {
+  cursor: grab;
+}
+body.dragging,
+#board.dragging {
+  cursor: grabbing !important;
+}
+
+/* ============================== BOARD ============================== */
 #board {
   border: 2px solid #000;
   background: #fff;
@@ -111,7 +123,7 @@ h1 {
   z-index: 1;
 }
 
-/* Buttons */
+/* ============================== BUTTONS ============================== */
 .button-container {
   margin: 12px auto;
   display: flex;
@@ -122,9 +134,26 @@ button {
   padding: 8px 16px;
   font-size: 16px;
   cursor: pointer;
+  border-radius: 8px;
 }
 
-/* Modal */
+.confirm-btn {
+  font-family: "Scribble";
+  font-size: 18px;
+  border-radius: 10px;
+  background: #f0f8ff;
+  padding: 6px 18px;
+  border: 2px solid #a0c4ff;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.confirm-btn:hover { background: #d8ebff; }
+.confirm-btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================== MODALS ============================== */
 .modal {
   display: none;
   position: fixed;
@@ -159,83 +188,19 @@ a {
   color: #007bff;
   text-decoration: none;
 }
+a:hover { text-decoration: underline; }
 
-a:hover {
-  text-decoration: underline;
-}
-
-#yellow-panel .piece-grid,
-#green-panel  .piece-grid { padding-bottom: 18px; }
-
-/* Turn-highlighting: make non-active panels lighter */
-[data-panel] { transition: opacity 120ms ease; }
-[data-panel][data-active="false"] { opacity: 0.35; }
-
-/* Panels: show 'grab' over piece tiles */
-[data-panel] [data-piece] { cursor: grab; }
-
-/* While dragging: force grabbing cursor */
-body.dragging, #board.dragging { cursor: grabbing !important; }
-
-
-/* Turn banner: bigger, bolder, high contrast, no layout shift */
-#turn-banner{
-  position: absolute;
-  z-index: 3;
-  display: inline-block;
-
-  /* size + weight */
-  font-weight: 800;
-  font-size: clamp(16px, 1.35vw + 10px, 24px);
-  line-height: 1.2;
-  letter-spacing: 0.2px;
-
-  /* padding + rounded */
-  padding: 12px 18px;              /* bigger */
-  border-radius: 12px;
-
-  /* visibility */
-  color: #1e293b;                   /* slate-800 */
-  background: #f2f3f5;              /* neutral fallback */
-  box-shadow: 0 4px 14px rgba(0,0,0,.08);  /* subtle lift */
-  border: 1px solid rgba(0,0,0,.08);
-
-  /* behavior */
-  user-select: none;
-  pointer-events: none;
-}
-
-/* Gentle tints by color (kept subtle but clearer) */
-#turn-banner[data-color="blue"]   { background:#e1efff; border-color:#cfe3ff; }
-#turn-banner[data-color="yellow"] { background:#fff1bf; border-color:#ffe7a3; }
-#turn-banner[data-color="red"]    { background:#ffe2e2; border-color:#ffd2d2; }
-#turn-banner[data-color="green"]  { background:#dff8e9; border-color:#c7f0dc; }
-
-#turn-banner .hint {
-  display: block;
-  margin-top: 4px;
-  font-weight: 600;
-  font-size: 0.9em;
-  opacity: 0.85;
-}
-
-/* ===== Instructions Modal (single source of truth) ===== */
+/* ================== INSTRUCTIONS MODAL ================== */
 #instructionsModal {
   position: fixed;
   inset: 0;
-  display: none;               /* hidden by default */
-  align-items: center;         /* vertical center */
-  justify-content: center;     /* horizontal center */
-  background: rgba(0,0,0,0.35);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
   z-index: 1000;
 }
-
-/* Visible state toggled by JS */
-#instructionsModal[aria-hidden="false"] {
-  display: flex;               /* centered flexbox */
-}
-
-/* Modal card (first child) */
+#instructionsModal[aria-hidden="false"] { display: flex; }
 #instructionsModal > * {
   position: relative;
   max-width: 680px;
@@ -245,19 +210,181 @@ body.dragging, #board.dragging { cursor: grabbing !important; }
   background: #fff;
   border-radius: 10px;
   padding: 20px 24px;
-  box-shadow: 0 10px 40px rgba(0,0,0,.3);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
-
-/* Close button (optional) */
-#instructionsModal [data-close],
 #instructionsModal .close {
   position: absolute;
   top: 8px;
   right: 12px;
-  border: 0;
   background: transparent;
   font-size: 20px;
-  line-height: 1;
   cursor: pointer;
 }
 
+/* ================== PLAYER SELECT ================== */
+.player-select-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 2000;
+}
+.player-select-content {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  padding: 28px 36px;
+  text-align: center;
+  min-width: 320px;
+  animation: fadeIn 0.25s ease-out;
+}
+.player-select-content h2 {
+  font-family: "Scribble";
+  font-size: 1.6rem;
+  color: #333;
+  margin-bottom: 16px;
+}
+.player-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.player-buttons button {
+  background: #444;
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background 0.25s;
+}
+.player-buttons button:hover { background: #666; }
+.player-buttons button.active {
+  background: #2f80ed;
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(47, 128, 237, 0.35);
+  transform: scale(1.05);
+  transition: all 0.2s ease;
+}
+.close-btn {
+  background: #2f80ed;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.close-btn:hover { background: #1c5edc; }
+.player-select-modal[hidden] { display: none; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ============================== SCOREBOARD ============================== */
+.scoreboard {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  gap: 1.4rem;
+  margin: 10px auto 16px;
+  padding: 2px 12px;
+  width: min(90%, 640px);
+  background: #fffaf0;
+  border: 3px dashed #222;
+  border-radius: 12px;
+  font-family: "ScribbleHand", "Scribble", cursive;
+  box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.1);
+  line-height: 1;
+}
+
+.score-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 65px;
+  text-align: center;
+  transform: translateY(1px);
+}
+.score-label {
+  font-size: 0.9rem;
+  color: #333;
+  margin-bottom: 1px;
+}
+.score-value {
+  font-size: 1.4rem;
+  font-family: "Scribble";
+  font-weight: bold;
+}
+.score-sub {
+  font-size: 0.75rem;
+  color: #555;
+  opacity: 0.8;
+}
+
+/* colors */
+.score-item.blue .score-value { color: #2f80ed; text-shadow: 0 1px 0 #cddcff; }
+.score-item.yellow .score-value { color: #f2c94c; text-shadow: 0 1px 0 #fff4b0; }
+.score-item.red .score-value { color: #e74c3c; text-shadow: 0 1px 0 #ffcfcf; }
+.score-item.green .score-value { color: #27ae60; text-shadow: 0 1px 0 #caffcf; }
+
+/* ============================== TURN BANNER ============================== */
+.turn-banner {
+  position: fixed;
+  top: clamp(6%, 8vw, 14%);
+  right: clamp(2%, 8vw, 10%);
+  padding: 10px 20px;
+  border-radius: 16px;
+  font-family: "Scribble", "Scribble_Hand", sans-serif;
+  font-size: clamp(1rem, 1.2vw + 0.8rem, 1.6rem);
+  color: #333;
+  background: #e8efff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  text-align: center;
+  z-index: 20;
+  transition: top 0.3s ease, right 0.3s ease;
+}
+
+.turn-banner.blue { background: #dce7ff; color: #2054b4; }
+.turn-banner.red { background: #ffd9d9; color: #c33; }
+.turn-banner.yellow { background: #fff6cc; color: #9c8500; }
+.turn-banner.green { background: #d8f5d4; color: #1b6b2f; }
+
+.turn-banner-main small {
+  font-size: 0.9rem;
+  opacity: 0.75;
+  display: block;
+  margin-top: 4px;
+}
+
+/* ============================== FORFEIT MODAL ============================== */
+#forfeitBtn {
+  background: #ffe2e2;
+  border: 2px solid #ffbaba;
+  color: #a30000;
+}
+#forfeitBtn:hover { background: #ffcccc; }
+
+#forfeitModal {
+  background: rgba(0, 0, 0, 0.55);
+}
+#forfeitModal button#confirmForfeitYes {
+  background: #ff4d4d;
+}
+#forfeitModal button#confirmForfeitYes:hover {
+  background: #e63a3a;
+}
+#forfeitModal button#confirmForfeitNo {
+  background: #ccc;
+  color: #000;
+}
+#forfeitModal button#confirmForfeitNo:hover {
+  background: #bbb;
+}

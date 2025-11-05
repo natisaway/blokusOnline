@@ -1,52 +1,49 @@
-
 import { boardState } from "../state/boardState.js";
-/**
- * Render all panels.
- * @param {{yellow:HTMLElement, red:HTMLElement, blue:HTMLElement, green:HTMLElement}} panels
- * @param {number|Object} pieceSizes - single number or per-color map
- * @param {{yellow:HTMLImageElement, red:HTMLImageElement, blue:HTMLImageElement, green:HTMLImageElement}} images
- * @param {(piece, clientX:number, clientY:number, offsetX:number, offsetY:number, wrapperEl:HTMLElement)=>void} startDrag
- */
-export function renderAllPieces(panels, pieceSizes, images, startDrag) {
-  // Clear targets
-  Object.values(panels).forEach((el) => (el.innerHTML = ""));
 
-  ["yellow", "red", "blue", "green"].forEach((color) => {
+export function renderAllPieces(panels, pieceSize, textures = {}, startDrag = () => {}) {
+  const colors = ["yellow", "red", "blue", "green"];
+
+  colors.forEach((color) => {
     const panel = panels[color];
     if (!panel) return;
 
-    // Panel content grid 
+    panel.innerHTML = "";
+
     const grid = document.createElement("div");
     grid.className = "piece-grid";
-
-    // Ensure last row never clips
-    if (color === "yellow" || color === "green") {
-      grid.style.paddingBottom = "18px";
-    }
-
+    if (color === "yellow" || color === "green") grid.style.paddingBottom = "18px";
     panel.appendChild(grid);
 
-    const size =
-      typeof pieceSizes === "number" ? pieceSizes : (pieceSizes[color] ?? 14);
+    const available = boardState.availablePieces[color] || [];
+    for (const [index, shape] of available.entries()) {
+      const pieceWrapper = document.createElement("div");
+      pieceWrapper.className = "piece-wrapper";
+      pieceWrapper.dataset.piece = JSON.stringify(shape);
 
-    // Render only available shapes
-    const list = (boardState.availablePieces?.[color] || []);
-    list.forEach((shape, index) => {
-      const wrapper = createPieceCanvas(
-        { id: `${color}-${index}`, shape, color, imageObj: images[color] },
-        size,
-        startDrag
-      );
-      grid.appendChild(wrapper);
-    });
+      const textureImg = textures?.[color] || null;
+      const canvas = createPieceCanvas(shape, pieceSize, color, textureImg);
+      pieceWrapper.appendChild(canvas);
+
+      pieceWrapper.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        startDrag({ shape, color, imageObj: textureImg, source: "panel" },
+          e.clientX, e.clientY, 8, 8, panel);
+      });
+
+      pieceWrapper.addEventListener("touchstart", (e) => {
+        const t = e.touches[0];
+        if (!t) return;
+        startDrag({ shape, color, imageObj: textureImg, source: "panel" },
+          t.clientX, t.clientY, 8, 8, panel);
+      });
+
+      grid.appendChild(pieceWrapper);
+    }
   });
 }
 
-// canvas tile for a single shape
-function createPieceCanvas(piece, pieceSize, startDrag) {
-  const { shape, color, imageObj } = piece;
-
-  // Compute bounding box
+export function createPieceCanvas(shape, cellSize, color, textureImg) {
   const xs = shape.map(([x]) => x);
   const ys = shape.map(([, y]) => y);
   const minX = Math.min(...xs);
@@ -56,61 +53,27 @@ function createPieceCanvas(piece, pieceSize, startDrag) {
 
   const cols = maxX - minX + 1;
   const rows = maxY - minY + 1;
+  const pad = 2;
 
-  const padding = 2;
-  const w = cols * pieceSize + padding * 2;
-  const h = rows * pieceSize + padding * 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = cols * cellSize + pad * 2;
+  canvas.height = rows * cellSize + pad * 2;
+  const ctx = canvas.getContext("2d");
 
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  c.setAttribute("draggable", "false"); 
+  for (const [x, y] of shape) {
+    const dx = (x - minX) * cellSize + pad;
+    const dy = (y - minY) * cellSize + pad;
 
-  const ctx = c.getContext("2d");
-  ctx.imageSmoothingEnabled = false;
-
-  // draw each cell
-  shape.forEach(([x, y]) => {
-    const dx = (x - minX) * pieceSize + padding;
-    const dy = (y - minY) * pieceSize + padding;
-
-    if (imageObj) {
-      ctx.drawImage(imageObj, 0, 0, imageObj.width, imageObj.height, dx, dy, pieceSize, pieceSize);
+    if (textureImg?.width) {
+      ctx.drawImage(textureImg, dx, dy, cellSize, cellSize);
     } else {
       ctx.fillStyle = color;
-      ctx.fillRect(dx, dy, pieceSize, pieceSize);
+      ctx.fillRect(dx, dy, cellSize, cellSize);
       ctx.strokeStyle = "#000";
-      ctx.strokeRect(dx, dy, pieceSize, pieceSize);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(dx, dy, cellSize, cellSize);
     }
-  });
+  }
 
-  // wrapper so we can hide/show while placed
-  const wrapper = document.createElement("div");
-  wrapper.className = "piece-wrapper";
-  wrapper.style.margin = "2px";
-  wrapper.dataset.pieceId = piece.id;
-  wrapper.appendChild(c);
-
-  // Begin drag from panel
-  c.addEventListener("mousedown", (e) => {
-    e.preventDefault();      
-    e.stopPropagation();     
-
-    startDrag(
-      {
-        id: piece.id,
-        shape: piece.shape.map(([x, y]) => [x, y]),
-        imageObj: piece.imageObj,
-        color: piece.color,
-        currentRotation: 0,
-      },
-      e.clientX,
-      e.clientY,
-      e.offsetX,
-      e.offsetY,
-      wrapper
-    );
-  });
-
-  return wrapper;
+  return canvas;
 }
