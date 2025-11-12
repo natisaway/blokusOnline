@@ -12,7 +12,7 @@
   <div id="turnBanner" class="turn-banner hidden">
     <div class="turn-banner-main">
       <span id="turnBannerText"></span><br />
-      <small id="turnBannerSub">Click "End Turn" when done</small>
+      <small id="turnBannerSub">Press Enter when done</small>
     </div>
   </div>
 
@@ -86,31 +86,13 @@
 
 
 <!-- ===== Score Counter ===== -->
-<div id="scoreBoard" class="scoreboard">
-  <div class="score-item blue">
-    <div class="score-label">Blue</div>
-    <div class="score-value" id="blueScore">89</div>
-    <div class="score-sub">squares left</div>
-  </div>
-  <div class="score-item yellow">
-    <div class="score-label">Yellow</div>
-    <div class="score-value" id="yellowScore">89</div>
-    <div class="score-sub">squares left</div>
-  </div>
-  <div class="score-item red">
-    <div class="score-label">Red</div>
-    <div class="score-value" id="redScore">89</div>
-    <div class="score-sub">squares left</div>
-  </div>
-  <div class="score-item green">
-    <div class="score-label">Green</div>
-    <div class="score-value" id="greenScore">89</div>
-    <div class="score-sub">squares left</div>
-  </div>
+<div id="scoreBoard" class="score-board">
+  <div class="score blue-score">Blue: <span id="blueScore">89</span> squares left</div>
+  <div class="score yellow-score">Yellow: <span id="yellowScore">89</span> squares left</div>
+  <div class="score red-score">Red: <span id="redScore">89</span> squares left</div>
+  <div class="score green-score">Green: <span id="greenScore">89</span> squares left</div>
 </div>
-
 
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>
-

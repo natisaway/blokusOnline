@@ -1,3 +1,6 @@
+// src/main.js
+// Fully patched Blokus main entry file
+
 import { BOARD_SIZE } from "./constants.js";
 import { loadTextures } from "./textures.js";
 import { createCanvasRenderer } from "./render/canvasRenderer.js";
@@ -9,10 +12,10 @@ import { attachKeyboard } from "./input/keyboard.js";
 import { aiPlayByStyle } from "./utils/computerAI.js";
 
 (async function init() {
-  console.log("Initializing Blokus...");
+  console.log("🎮 Initializing Blokus...");
 
-/* =========================== UI ELEMENT LAYOUT  =========================== */
-const canvas = document.getElementById("board");
+  /* ---------------- DOM ELEMENTS ---------------- */
+  const canvas = document.getElementById("board");
   const panels = {
     red: document.getElementById("red-panel"),
     blue: document.getElementById("blue-panel"),
@@ -31,7 +34,9 @@ const canvas = document.getElementById("board");
   const playerSelectModal = document.getElementById("playerSelectModal");
   const closePlayerSelect = document.getElementById("closePlayerSelect");
 
-  /* =========================== PLAYER COUNT SELECTION MODAL  =========================== */
+  /* ============================================================
+     PLAYER MODAL SETUP
+  ============================================================ */
   function setupPlayerModal() {
     if (!playerSelectModal) return;
     playerSelectModal.hidden = false;
@@ -61,14 +66,22 @@ const canvas = document.getElementById("board");
     });
   }
 
+  /* ============================================================
+     INITIAL PLAYER CONFIGURATION
+  ============================================================ */
   boardState.localPlayers = ["blue"];
   boardState.emit();
   setupPlayerModal();
 
-    /* =========================== INITIAL RENDER + TEXTURES  =========================== */
+  /* ============================================================
+     LOAD TEXTURES
+  ============================================================ */
   const textures = await loadTextures();
   boardState.textures = textures;
 
+  /* ============================================================
+     RENDERERS + SUBSCRIPTIONS
+  ============================================================ */
   const renderer = createCanvasRenderer(canvas, boardState);
   renderAllPieces(panels, boardState.pieceSize, textures, boardState.startDrag);
 
@@ -82,42 +95,48 @@ const canvas = document.getElementById("board");
     );
   });
 
-    /* =========================== RESPONSIVE LAYOUT  =========================== */
-    solveLayout(canvas, panels, {
+  /* ============================================================
+     RESPONSIVE LAYOUT
+  ============================================================ */
+  solveLayout(canvas, panels, {
     titleEl: document.querySelector("h1"),
     buttonsEl: document.querySelector(".button-container"),
   });
 
-    /* =========================== INPUT HANDLERS  =========================== */
-    attachCanvasInput(canvas, boardState, renderer);
+  /* ============================================================
+     INPUT + KEYBOARD
+  ============================================================ */
+  attachCanvasInput(canvas, boardState, renderer);
   attachKeyboard(boardState, renderer);
   subscribe(() => renderer(boardState));
 
-    /* =========================== SCORE UPDATER  =========================== */
-    function updateScores() {
+  /* ============================================================
+     SCORE TRACKING
+  ============================================================ */
+  function updateScores() {
     const scoreMap = {
       blue: document.getElementById("blueScore"),
       yellow: document.getElementById("yellowScore"),
       red: document.getElementById("redScore"),
       green: document.getElementById("greenScore"),
     };
-
     Object.keys(scoreMap).forEach((color) => {
       const remaining = boardState.availablePieces[color]
         .map((p) => p.length)
         .reduce((a, b) => a + b, 0);
-      scoreMap[color].textContent = remaining;
+      if (scoreMap[color]) scoreMap[color].textContent = remaining;
     });
   }
   subscribe(() => updateScores());
 
-    /* =========================== TURN BANNER UPDATE  =========================== */
-    function updateTurnBanner(color, customText = null) {
+  /* ============================================================
+     TURN BANNER + FORFEIT
+  ============================================================ */
+  function updateTurnBanner(color, customText = null) {
     const banner = document.getElementById("turnBanner");
     const text = document.getElementById("turnBannerText");
     const sub = document.getElementById("turnBannerSub");
     if (!banner || !text) return;
-
     banner.className = `turn-banner ${color}`;
     text.textContent = customText || `${color[0].toUpperCase() + color.slice(1)}'s turn`;
     sub.style.display = boardState.isLocal(color) ? "block" : "none";
@@ -134,9 +153,11 @@ const canvas = document.getElementById("board");
     sub.style.display = "none";
   }
 
-    /* =========================== TURN FLOW CONTROL  =========================== */
-    const forfeitedPlayers = new Set();
+  const forfeitedPlayers = new Set();
 
+  /* ============================================================
+     TURN + AI CYCLE
+  ============================================================ */
   async function runTurnCycle() {
     const current = boardState.currentPlayer;
     if (forfeitedPlayers.has(current)) {
@@ -164,8 +185,10 @@ const canvas = document.getElementById("board");
     await runTurnCycle();
   }
 
-    /* =========================== FORFEIT HANDLER  =========================== */
-    let pendingForfeit = false;
+  /* ============================================================
+     FORFEIT HANDLING
+  ============================================================ */
+  let pendingForfeit = false;
   async function handleForfeit() {
     const current = boardState.currentPlayer;
     if (!boardState.isLocal(current) || pendingForfeit) return;
@@ -186,7 +209,6 @@ const canvas = document.getElementById("board");
       confirmForfeitNo.addEventListener("click", cancel);
     }).then(async (confirmed) => {
       if (!confirmed) return;
-
       forfeitedPlayers.add(current);
       showForfeitMessage(current);
 
@@ -200,15 +222,30 @@ const canvas = document.getElementById("board");
     });
   }
 
-    /* =========================== AI-AUTOPLAY AFTER LOCAL FORFEIT  =========================== */
-    function continueAIOnly() {
+  /* ============================================================
+     FINAL SCOREBOARD
+  ============================================================ */
+  function showFinalScoreboard() {
+    const results = Object.keys(boardState.availablePieces).map((color) => {
+      const remaining = boardState.availablePieces[color]
+        .map((p) => p.length)
+        .reduce((a, b) => a + b, 0);
+      return { color, score: remaining };
+    });
+    results.sort((a, b) => a.score - b.score);
+    const summary = results.map(r => `${r.color.toUpperCase()}: ${r.score}`).join("\n");
+    alert("🏁 Final Scores:\n\n" + summary);
+  }
+
+  /* ============================================================
+     CONTINUE AI-ONLY MODE
+  ============================================================ */
+  function continueAIOnly() {
     btnForfeit.style.display = "none";
     btnConfirm.disabled = true;
     updateTurnBanner("blue", "AI autoplay in progress...");
 
-    const activeAIs = boardState.turnOrder.filter(
-      (c) => boardState.isAI(c) && !forfeitedPlayers.has(c)
-    );
+    const aiList = boardState.turnOrder.filter(c => boardState.isAI(c));
 
     function hasValidMove(color) {
       const available = boardState.availablePieces[color] || [];
@@ -222,66 +259,66 @@ const canvas = document.getElementById("board");
       return false;
     }
 
-    function nextAIIndex(currentIndex) {
-      for (let i = 1; i <= activeAIs.length; i++) {
-        const next = (currentIndex + i) % activeAIs.length;
-        const color = activeAIs[next];
-        if (!forfeitedPlayers.has(color)) return next;
+    async function aiLoop() {
+      let moved = false;
+      for (const color of aiList) {
+        if (forfeitedPlayers.has(color)) continue;
+        if (!hasValidMove(color)) {
+          forfeitedPlayers.add(color);
+          continue;
+        }
+        boardState.currentTurnIndex = boardState.turnOrder.indexOf(color);
+        updateTurnBanner(color);
+        aiPlayByStyle(color);
+        boardState.emit();
+        moved = true;
+        await new Promise(r => setTimeout(r, 500));
       }
-      return -1;
+
+      const allOut = aiList.every(c => forfeitedPlayers.has(c));
+      if (allOut || !moved) {
+        showFinalScoreboard();
+        return;
+      }
+
+      await new Promise(r => setTimeout(r, 500));
+      aiLoop();
     }
 
-    let currentIndex = 0;
-
-    function step() {
-      const color = activeAIs[currentIndex];
-
-      if (forfeitedPlayers.has(color)) {
-        currentIndex = nextAIIndex(currentIndex);
-        return setTimeout(step, 200);
-      }
-
-      if (!hasValidMove(color)) {
-        forfeitedPlayers.add(color);
-        currentIndex = nextAIIndex(currentIndex);
-        return setTimeout(step, 200);
-      }
-
-      boardState.currentTurnIndex = boardState.turnOrder.indexOf(color);
-      updateTurnBanner(color);
-      aiPlayByStyle(color);
-      boardState.emit();
-      currentIndex = nextAIIndex(currentIndex);
-      setTimeout(step, 700);
-    }
-
-    step();
+    aiLoop();
   }
 
-    /* =========================== BUTTON ACTIONS  =========================== */
-    btnConfirm.addEventListener("click", handleEndTurn);
+  /* ============================================================
+     BUTTON EVENTS
+  ============================================================ */
+  btnConfirm.addEventListener("click", handleEndTurn);
   btnForfeit.addEventListener("click", handleForfeit);
 
-    /* =========================== RESET GAME  =========================== */
-    btnReset.addEventListener("click", () => {
-      console.log("Resetting full game...");
-      window.location.reload();
-    });
-    
-
-    /* =========================== INSTRUCTIONS MODAL  =========================== */
-    btnInstructions.addEventListener("click", () =>
-    document.getElementById("instructionsModal")?.setAttribute("aria-hidden", "false")
-  );
-  document.getElementById("closeModal")?.addEventListener("click", () =>
-    document.getElementById("instructionsModal")?.setAttribute("aria-hidden", "true")
-  );
-
-    /* =========================== GAME START  =========================== */
-    function startGame() {
+  btnReset.addEventListener("click", () => {
     forfeitedPlayers.clear();
+    boardState.reset();
+    renderAllPieces(panels, boardState.pieceSize, boardState.textures, boardState.startDrag);
     renderer(boardState);
-    updateTurnBanner("blue", "Blue's turn");
+    updateScores();
+    setupPlayerModal();
+  });
+
+  btnInstructions.addEventListener("click", () => {
+    const modal = document.getElementById("instructionsModal");
+    if (modal) modal.hidden = false;
+  });
+
+  document.getElementById("closeModal")?.addEventListener("click", () => {
+    const modal = document.getElementById("instructionsModal");
+    if (modal) modal.hidden = true;
+  });
+
+  /* ============================================================
+     START GAME
+  ============================================================ */
+  function startGame() {
+    console.log("🚀 Starting Blokus (Blue = Local, 3 AIs)");
+    renderer(boardState);
     updateScores();
     runTurnCycle();
   }

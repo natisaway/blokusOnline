@@ -1,3 +1,4 @@
+// src/render/canvasRenderer.js
 import { BOARD_SIZE } from "../constants.js";
 
 const FILL = {
@@ -17,8 +18,8 @@ const START_COLORS = {
 export function createCanvasRenderer(canvas, state) {
   const ctx = canvas.getContext("2d");
 
-/* =========================== SIZING AND GRID =========================== */
-function ensureCanvasSize() {
+  /* ---------------- sizing + grid ---------------- */
+  function ensureCanvasSize() {
     if (!state) return;
     const px = BOARD_SIZE * state.cellSize;
     if (canvas.width !== px || canvas.height !== px) {
@@ -51,8 +52,8 @@ function ensureCanvasSize() {
     ctx.restore();
   }
 
-/* =========================== START SQUARES =========================== */
-function drawStartSquare(color, sp) {
+  /* ---------------- start squares ---------------- */
+  function drawStartSquare(color, sp) {
     if (!sp) return;
     const cs = state.cellSize;
     const x = sp.x * cs;
@@ -70,8 +71,8 @@ function drawStartSquare(color, sp) {
     ctx.restore();
   }
 
-/* =========================== HELPERS =========================== */
-function drawBlocksAt(shape, origin, color, imageObj) {
+  /* ---------------- helpers ---------------- */
+  function drawBlocksAt(shape, origin, color, imageObj) {
     const cs = state.cellSize;
     ctx.save();
     for (const [dx, dy] of shape) {
@@ -90,16 +91,16 @@ function drawBlocksAt(shape, origin, color, imageObj) {
     ctx.restore();
   }
 
-/* =========================== PLACED PIECES =========================== */
-function drawPlaced() {
+  /* ---------------- placed pieces ---------------- */
+  function drawPlaced() {
     if (!state?.placedPieces) return;
     for (const piece of state.placedPieces) {
       drawBlocksAt(piece.shape, piece.origin, piece.color, piece.imageObj);
     }
   }
 
-/* =========================== PREVIEW =========================== */
-function drawPreview() {
+  /* ---------------- preview (NEW) ---------------- */
+  function drawPreview() {
     const dp = state.draggingPiece;
     if (!dp || !state.previewOrigin) return;
 
@@ -132,14 +133,14 @@ function drawPreview() {
     Object.entries(state.startPoint).forEach(([color, sp]) => drawStartSquare(color, sp));
   }
 
-/* =========================== MAIN LOOP =========================== */
-function frame() {
+  /* ---------------- main loop ---------------- */
+  function frame() {
     if (!state) return;
     ensureCanvasSize();
     drawGrid();
     drawAllStartSquares();
     drawPlaced();
-    drawPreview(); 
+    drawPreview(); // 👈 show piece while dragging
     requestAnimationFrame(frame);
   }
 

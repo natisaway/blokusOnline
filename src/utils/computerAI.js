@@ -1,8 +1,20 @@
+// src/utils/computerAI.js
 import { boardState } from "../state/boardState.js";
 import { BOARD_SIZE } from "../constants.js";
 import { isValidPlacement } from "../state/boardRules.js";
 
-/* =========================== UTILITY =========================== */
+/**
+ * =============================================
+ * BLENDED AI SYSTEM (Randomized & Optimized)
+ * =============================================
+ *  - Yellow: MinMax (heuristic search)
+ *  - Red: Greedy (best immediate placement)
+ *  - Green: Defensive (corner-based with randomness)
+ *  - Blue: Human player
+ *  Adds randomness so AI games differ every run.
+ */
+
+// --- Utility ---
 function cloneBoardMatrix() {
   const b = Array.from({ length: BOARD_SIZE }, () =>
     Array(BOARD_SIZE).fill(null)
@@ -19,7 +31,7 @@ function cloneBoardMatrix() {
   return b;
 }
 
-/* =========================== SCORE UPDATER  =========================== */
+// --- Heuristic scoring ---
 function scoreBoard(color, board) {
   let myCount = 0;
   let openCorners = 0;
@@ -53,20 +65,20 @@ function scoreBoard(color, board) {
   return myCount + openCorners * 0.3;
 }
 
-/* =========================== CHECK VALID MOVES FOR RANDOMIZING =========================== */
+// --- Find all valid moves (randomized order) ---
 function findAllValidMoves(color) {
   const board = cloneBoardMatrix();
   const available = [...(boardState.availablePieces[color] || [])];
   const moves = [];
 
-  /* Shuffle available pieces to make AI less predictable */
+  // 🔀 Shuffle available pieces to make AI less deterministic
   for (let i = available.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [available[i], available[j]] = [available[j], available[i]];
   }
 
   for (const shape of available) {
-    // randomize search direction
+    // Randomize search direction
     const yOrder =
       Math.random() > 0.5
         ? [...Array(BOARD_SIZE).keys()]
@@ -86,7 +98,7 @@ function findAllValidMoves(color) {
     }
   }
 
-  // randomize final move order for tie-breaking
+  // Randomize final move order for tie-breaking
   for (let i = moves.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [moves[i], moves[j]] = [moves[j], moves[i]];
@@ -95,7 +107,7 @@ function findAllValidMoves(color) {
   return moves;
 }
 
-/* =========================== SIMULATE PLACEMENT =========================== */
+// --- Simulate placement ---
 function simulatePlacement(board, move, color) {
   const newBoard = board.map((r) => [...r]);
   for (const [dx, dy] of move.shape) {
@@ -107,7 +119,7 @@ function simulatePlacement(board, move, color) {
   return newBoard;
 }
 
-/* pick one of the top few moves at random */
+// --- Pick one of the top few moves at random ---
 function pickRandomTop(moves, scores, topN = 3) {
   const combined = moves.map((m, i) => ({ move: m, score: scores[i] }));
   combined.sort((a, b) => b.score - a.score);
@@ -116,7 +128,9 @@ function pickRandomTop(moves, scores, topN = 3) {
   return choice.move;
 }
 
-/* ================== STRATEGY 1: YELLOW (MinMax with small random bias) ================== */
+/* =====================================================
+   STRATEGY 1: YELLOW (MinMax with small random bias)
+===================================================== */
 function minmax(color, depth = 2, alpha = -Infinity, beta = Infinity) {
   const board = cloneBoardMatrix();
 
@@ -166,7 +180,9 @@ function minmax(color, depth = 2, alpha = -Infinity, beta = Infinity) {
   return pickRandomTop(allMoves, evaluations, 2);
 }
 
-/* ================== STRATEGY 2: RED (greedy with tie-break randomness) ================== */
+/* =====================================================
+   STRATEGY 2: RED (Greedy with tie-break randomness)
+===================================================== */
 function greedy(color) {
   const board = cloneBoardMatrix();
   const moves = findAllValidMoves(color);
@@ -179,8 +195,10 @@ function greedy(color) {
 
   return pickRandomTop(moves, scores, 3);
 }
-   
-/* ================== STRATEGY 3: GREEN (defensive with random variety) ================== */
+
+/* =====================================================
+   STRATEGY 3: GREEN (Defensive with random variety)
+===================================================== */
 function defensive(color) {
   const board = cloneBoardMatrix();
   const moves = findAllValidMoves(color);
@@ -201,7 +219,7 @@ function defensive(color) {
     score += pieceSize * 3.0;
     score += scoreBoard(color, sim) * 0.4;
 
-    // randomly alter behavior
+    // Randomly alter behavior a little
     score += (Math.random() - 0.5) * 3;
 
     let crowdPenalty = 0;
@@ -233,12 +251,16 @@ function defensive(color) {
   return top[Math.floor(Math.random() * top.length)].m;
 }
 
-/* ================== STRATEGY 4: BLUE (Local / Human) ================== */
+/* =====================================================
+   STRATEGY 4: BLUE (Local / Human)
+===================================================== */
 function skip() {
   return null;
 }
 
-/* ================== MAIN AI DISPATCH ================== */
+/* =====================================================
+   MAIN AI DISPATCH
+===================================================== */
 export function aiPlayByStyle(color) {
   if (boardState.isLocal(color)) return false;
   const textures = boardState.textures || {};
@@ -267,7 +289,7 @@ export function aiPlayByStyle(color) {
 
   const success = boardState.dropAt(move.x, move.y, move.shape, image);
   if (success)
-    console.log(` ${color} placed at (${move.x}, ${move.y})`);
+    console.log(`🤖 ${color} placed at (${move.x}, ${move.y})`);
   else console.warn(`${color} failed to place a piece.`);
   return success;
 }

@@ -1,6 +1,9 @@
 import { boardState } from "../state/boardState.js";
 
-
+/**
+ * Rebuilds shape from original base + rotation/flip each keypress.
+ * Prevents cumulative distortion and cross-player interference.
+ */
 function applyTransformsFromBase(piece) {
   if (!piece.originalShape) return piece.shape;
   const base = JSON.parse(JSON.stringify(piece.originalShape));
