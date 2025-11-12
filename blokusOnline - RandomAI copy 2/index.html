@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blokus Online</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <h1>Blokus Online</h1>
+  
+  <div id="turnBanner" class="turn-banner hidden">
+    <div class="turn-banner-main">
+      <span id="turnBannerText"></span><br />
+      <small id="turnBannerSub">Press Enter when done</small>
+    </div>
+  </div>
+
+  <!-- ===== Player Select Modal ===== -->
+  <div id="playerSelectModal" class="player-select-modal" hidden>
+    <div class="player-select-content">
+      <h2>Select Local Players</h2>
+      <div class="player-buttons">
+        <button data-count="1">1P</button>
+        <button data-count="2">2P</button>
+        <button data-count="3">3P</button>
+        <button data-count="4">4P</button>
+      </div>
+      <button id="closePlayerSelect" class="close-btn">Start Game</button>
+    </div>
+  </div>
+
+  <!-- ===== Top Yellow Panel ===== -->
+  <div id="yellow-panel" class="panel strip strip--yellow"></div>
+
+  <!-- ===== Main Board Layout ===== -->
+  <div id="game-container" class="middle">
+    <div id="red-panel" class="panel side-panel left-panel"></div>
+    <canvas id="board"></canvas>
+    <div id="blue-panel" class="panel side-panel right-panel"></div>
+  </div>
+
+  <!-- ===== Bottom Green Panel ===== -->
+  <div id="green-panel" class="panel strip strip--green"></div>
+
+<!-- ===== Control Buttons ===== -->
+<div class="button-container">
+  <button id="resetBtn">Reset Board</button>
+  <button id="instructionsBtn">Instructions</button>
+  <button id="forfeitBtn" class="confirm-btn">Forfeit Turn</button>
+  <button id="confirmTurnBtn" class="confirm-btn">End Turn</button>
+</div>
+
+
+  <!-- ===== Instructions Modal ===== -->
+  <div id="instructionsModal" class="modal" aria-hidden="true">
+    <div class="modal-content">
+      <span id="closeModal" class="close" aria-label="Close Instructions">&times;</span>
+      <h2>Game Instructions</h2>
+      <p>
+        - Drag and drop pieces<br /><br />
+        - R to rotate a piece<br /><br />
+        - F to flip a piece horizontally<br /><br />
+        - V to flip a piece vertically<br /><br />
+        - Hold a piece and press Delete to return it to your pile<br /><br />
+      </p>
+      <a href="https://service.mattel.com/instruction_sheets/BJV44-Eng.pdf"
+         target="_blank"
+         rel="noopener noreferrer">
+        View Official Rules PDF
+      </a>
+    </div>
+  </div>
+
+  <!-- ===== Forfeit Confirmation Modal ===== -->
+<div id="forfeitModal" class="player-select-modal" hidden>
+  <div class="player-select-content">
+    <h2>Forfeit Turn?</h2>
+    <p style="margin-bottom:16px;">Are you sure you want to forfeit your turn?<br/>You won’t be able to play again this game.</p>
+    <div class="player-buttons">
+      <button id="confirmForfeitYes">Yes, Forfeit</button>
+      <button id="confirmForfeitNo">Cancel</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ===== Score Counter ===== -->
+<div id="scoreBoard" class="score-board">
+  <div class="score blue-score">Blue: <span id="blueScore">89</span> squares left</div>
+  <div class="score yellow-score">Yellow: <span id="yellowScore">89</span> squares left</div>
+  <div class="score red-score">Red: <span id="redScore">89</span> squares left</div>
+  <div class="score green-score">Green: <span id="greenScore">89</span> squares left</div>
+</div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
