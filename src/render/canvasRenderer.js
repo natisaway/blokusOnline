@@ -1,5 +1,12 @@
-// src/render/canvasRenderer.js
 import { BOARD_SIZE } from "../constants.js";
+
+/**
+ * EVENT-DRIVEN CANVAS RENDERER
+ * ----------------------------
+ * - No infinite animation loop.
+ * - Redraws ONLY when boardState.emit() is triggered.
+ * - Drag preview updated only during mousemove.
+ */
 
 const FILL = {
   red: "#e74c3c",
@@ -18,9 +25,8 @@ const START_COLORS = {
 export function createCanvasRenderer(canvas, state) {
   const ctx = canvas.getContext("2d");
 
-  /* ---------------- sizing + grid ---------------- */
+  /* ---------------- sizing ---------------- */
   function ensureCanvasSize() {
-    if (!state) return;
     const px = BOARD_SIZE * state.cellSize;
     if (canvas.width !== px || canvas.height !== px) {
       canvas.width = px;
@@ -28,9 +34,11 @@ export function createCanvasRenderer(canvas, state) {
     }
   }
 
+  /* ---------------- grid ---------------- */
   function drawGrid() {
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     ctx.strokeStyle = "#cfcfcf";
     ctx.lineWidth = 1;
 
@@ -48,7 +56,13 @@ export function createCanvasRenderer(canvas, state) {
 
     ctx.strokeStyle = "#333";
     ctx.lineWidth = 2;
-    ctx.strokeRect(0.5, 0.5, BOARD_SIZE * state.cellSize - 1, BOARD_SIZE * state.cellSize - 1);
+    ctx.strokeRect(
+      0.5,
+      0.5,
+      BOARD_SIZE * state.cellSize - 1,
+      BOARD_SIZE * state.cellSize - 1
+    );
+
     ctx.restore();
   }
 
@@ -61,27 +75,36 @@ export function createCanvasRenderer(canvas, state) {
 
     ctx.save();
     ctx.globalAlpha = 0.25;
-    ctx.fillStyle = START_COLORS[color] || "#666";
+    ctx.fillStyle = START_COLORS[color];
     ctx.fillRect(x, y, cs, cs);
 
     ctx.globalAlpha = 0.6;
-    ctx.strokeStyle = START_COLORS[color] || "#666";
+    ctx.strokeStyle = START_COLORS[color];
     ctx.lineWidth = Math.max(1, Math.floor(cs * 0.08));
     ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
+
     ctx.restore();
   }
 
-  /* ---------------- helpers ---------------- */
+  function drawAllStartSquares() {
+    if (!state.startPoint) return;
+    for (const [color, sp] of Object.entries(state.startPoint)) {
+      drawStartSquare(color, sp);
+    }
+  }
+
+  /* ---------------- placed pieces ---------------- */
   function drawBlocksAt(shape, origin, color, imageObj) {
     const cs = state.cellSize;
     ctx.save();
     for (const [dx, dy] of shape) {
       const x = (origin.x + dx) * cs;
       const y = (origin.y + dy) * cs;
-      if (imageObj?.width && imageObj?.height) {
+
+      if (imageObj?.width) {
         ctx.drawImage(imageObj, x, y, cs, cs);
       } else {
-        ctx.fillStyle = FILL[color] || "#888";
+        ctx.fillStyle = FILL[color];
         ctx.fillRect(x, y, cs, cs);
         ctx.strokeStyle = "rgba(0,0,0,.35)";
         ctx.lineWidth = Math.max(1, Math.floor(cs * 0.06));
@@ -91,23 +114,21 @@ export function createCanvasRenderer(canvas, state) {
     ctx.restore();
   }
 
-  /* ---------------- placed pieces ---------------- */
   function drawPlaced() {
-    if (!state?.placedPieces) return;
-    for (const piece of state.placedPieces) {
-      drawBlocksAt(piece.shape, piece.origin, piece.color, piece.imageObj);
+    if (!state.placedPieces) return;
+    for (const p of state.placedPieces) {
+      drawBlocksAt(p.shape, p.origin, p.color, p.imageObj);
     }
   }
 
-  /* ---------------- preview (NEW) ---------------- */
+  /* ---------------- preview ---------------- */
   function drawPreview() {
     const dp = state.draggingPiece;
     if (!dp || !state.previewOrigin) return;
 
     const cs = state.cellSize;
-    const color = dp.color;
-    const valid = state.previewValid;
     const origin = state.previewOrigin;
+    const valid = state.previewValid;
 
     ctx.save();
     ctx.globalAlpha = valid ? 0.6 : 0.3;
@@ -117,36 +138,29 @@ export function createCanvasRenderer(canvas, state) {
     for (const [dx, dy] of dp.shape) {
       const x = (origin.x + dx) * cs;
       const y = (origin.y + dy) * cs;
+
       if (dp.imageObj?.width) {
         ctx.drawImage(dp.imageObj, x, y, cs, cs);
       } else {
-        ctx.fillStyle = valid ? FILL[color] || color : "#aaa";
+        ctx.fillStyle = valid ? FILL[dp.color] : "#aaa";
         ctx.fillRect(x, y, cs, cs);
         ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
       }
     }
+
     ctx.restore();
   }
 
-  function drawAllStartSquares() {
-    if (!state?.startPoint) return;
-    Object.entries(state.startPoint).forEach(([color, sp]) => drawStartSquare(color, sp));
-  }
-
-  /* ---------------- main loop ---------------- */
-  function frame() {
-    if (!state) return;
+  /* ---------------- MAIN DRAW ---------------- */
+  function render(updatedState = state) {
+    state = updatedState;
     ensureCanvasSize();
+
     drawGrid();
     drawAllStartSquares();
     drawPlaced();
-    drawPreview(); // 👈 show piece while dragging
-    requestAnimationFrame(frame);
+    drawPreview();
   }
 
-  requestAnimationFrame(frame);
-
-  return function render(updatedState) {
-    state = updatedState;
-  };
+  return render;
 }
