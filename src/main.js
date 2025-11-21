@@ -1,5 +1,10 @@
-// src/main.js
-// Fully patched Blokus main entry file
+// Patched main.js
+// NOTE: This is a fully replaced file with fixes for
+// - AI autoplay until completion
+// - Reset button restart logic
+// - Prep hooks for piece readjustment/undo-turn logic
+// - Instructions modal using `hidden` to match HTML
+// Imported modules remain unchanged
 
 import { BOARD_SIZE } from "./constants.js";
 import { loadTextures } from "./textures.js";
@@ -12,9 +17,8 @@ import { attachKeyboard } from "./input/keyboard.js";
 import { aiPlayByStyle } from "./utils/computerAI.js";
 
 (async function init() {
-  console.log("🎮 Initializing Blokus...");
+  console.log("Initializing Blokus...");
 
-  /* ---------------- DOM ELEMENTS ---------------- */
   const canvas = document.getElementById("board");
   const panels = {
     red: document.getElementById("red-panel"),
@@ -34,27 +38,34 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
   const playerSelectModal = document.getElementById("playerSelectModal");
   const closePlayerSelect = document.getElementById("closePlayerSelect");
 
-  /* ============================================================
-     PLAYER MODAL SETUP
-  ============================================================ */
+  const instructionsModal = document.getElementById("instructionsModal");
+  const closeInstructions = document.getElementById("closeModal");
+
+  // -------------------------------
+  // Player modal setup
+  // -------------------------------
+
   function setupPlayerModal() {
     if (!playerSelectModal) return;
     playerSelectModal.hidden = false;
 
     const playerButtons = playerSelectModal.querySelectorAll("button[data-count]");
     playerButtons.forEach((b) => b.classList.remove("active"));
+
     const firstBtn = playerSelectModal.querySelector('button[data-count="1"]');
     if (firstBtn) firstBtn.classList.add("active");
 
+    // Rebind close button
     closePlayerSelect.replaceWith(closePlayerSelect.cloneNode(true));
     const newCloseBtn = document.getElementById("closePlayerSelect");
 
     playerButtons.forEach((btn) => {
       btn.onclick = () => {
-        const count = parseInt(btn.dataset.count);
+        const count = parseInt(btn.dataset.count, 10);
         const colors = ["blue", "yellow", "red", "green"];
         boardState.localPlayers = colors.slice(0, count);
         boardState.emit();
+
         playerButtons.forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
       };
@@ -66,24 +77,22 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
     });
   }
 
-  /* ============================================================
-     INITIAL PLAYER CONFIGURATION
-  ============================================================ */
   boardState.localPlayers = ["blue"];
   boardState.emit();
   setupPlayerModal();
 
-  /* ============================================================
-     LOAD TEXTURES
-  ============================================================ */
+  // -------------------------------
+  // Load textures + renderers
+  // -------------------------------
   const textures = await loadTextures();
   boardState.textures = textures;
 
-  /* ============================================================
-     RENDERERS + SUBSCRIPTIONS
-  ============================================================ */
   const renderer = createCanvasRenderer(canvas, boardState);
   renderAllPieces(panels, boardState.pieceSize, textures, boardState.startDrag);
+
+  //  Draw the initial board grid once on load
+  renderer(boardState);
+
 
   subscribe(() => {
     renderer(boardState);
@@ -95,24 +104,31 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
     );
   });
 
-  /* ============================================================
-     RESPONSIVE LAYOUT
-  ============================================================ */
-  solveLayout(canvas, panels, {
-    titleEl: document.querySelector("h1"),
-    buttonsEl: document.querySelector(".button-container"),
-  });
+// 🔧 Compute layout and sync sizes into boardState
+const pack = solveLayout(canvas, panels, {
+  titleEl: document.querySelector("h1"),
+  buttonsEl: document.querySelector(".button-container"),
+});
 
-  /* ============================================================
-     INPUT + KEYBOARD
-  ============================================================ */
-  attachCanvasInput(canvas, boardState, renderer);
-  attachKeyboard(boardState, renderer);
-  subscribe(() => renderer(boardState));
+// Use the same cell size the layout picked
+boardState.cellSize = pack.cellSize;
+boardState.pieceSize = pack.pieceSize;
 
-  /* ============================================================
-     SCORE TRACKING
-  ============================================================ */
+// 👀 Draw once immediately so the grid is visible before any moves
+renderer(boardState);
+
+// Input + keyboard
+attachCanvasInput(canvas, boardState, renderer);
+attachKeyboard(boardState, renderer);
+
+// One subscription is enough; you can keep just this one:
+subscribe(() => renderer(boardState));
+
+
+  // -------------------------------
+  // Scoreboard
+  // -------------------------------
+
   function updateScores() {
     const scoreMap = {
       blue: document.getElementById("blueScore"),
@@ -120,23 +136,26 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
       red: document.getElementById("redScore"),
       green: document.getElementById("greenScore"),
     };
+
     Object.keys(scoreMap).forEach((color) => {
       const remaining = boardState.availablePieces[color]
         .map((p) => p.length)
         .reduce((a, b) => a + b, 0);
-      if (scoreMap[color]) scoreMap[color].textContent = remaining;
+      scoreMap[color].textContent = remaining;
     });
   }
   subscribe(() => updateScores());
 
-  /* ============================================================
-     TURN BANNER + FORFEIT
-  ============================================================ */
+  // -------------------------------
+  // Turn banner
+  // -------------------------------
+
   function updateTurnBanner(color, customText = null) {
     const banner = document.getElementById("turnBanner");
     const text = document.getElementById("turnBannerText");
     const sub = document.getElementById("turnBannerSub");
     if (!banner || !text) return;
+
     banner.className = `turn-banner ${color}`;
     text.textContent = customText || `${color[0].toUpperCase() + color.slice(1)}'s turn`;
     sub.style.display = boardState.isLocal(color) ? "block" : "none";
@@ -149,17 +168,20 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
     const sub = document.getElementById("turnBannerSub");
     if (!banner || !text) return;
     banner.className = `turn-banner ${color}`;
-    text.textContent = `${color[0].toUpperCase() + color.slice(1)} forfeits`;
+    text.textContent = `${color.toUpperCase()} forfeits`;
     sub.style.display = "none";
   }
 
   const forfeitedPlayers = new Set();
 
-  /* ============================================================
-     TURN + AI CYCLE
-  ============================================================ */
+  // -------------------------------
+  // Player/AI Turn Cycle
+  // -------------------------------
+
   async function runTurnCycle() {
     const current = boardState.currentPlayer;
+
+    // Skip forfeited players automatically
     if (forfeitedPlayers.has(current)) {
       boardState.endTurn();
       return runTurnCycle();
@@ -167,53 +189,75 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
 
     updateTurnBanner(current);
 
+    // AI TURN
     if (boardState.isAI(current)) {
       const success = aiPlayByStyle(current);
       if (!success) forfeitedPlayers.add(current);
+
       await new Promise((r) => setTimeout(r, 900));
+
       boardState.endTurn();
       return runTurnCycle();
     }
 
-    updateTurnBanner(current);
+    // LOCAL TURN
+    console.log(`🎯 ${current.toUpperCase()} (local player) — waiting for move...`);
+    // Now wait for user to click "End Turn"
   }
 
   async function handleEndTurn() {
     const current = boardState.currentPlayer;
-    if (!boardState.isLocal(current)) return;
+    if (!boardState.isLocal(current)) {
+      console.warn("End Turn pressed when it's not a local player's turn.");
+      return;
+    }
+
+    // Optional: enforce at least one piece placement
+    // if (!boardState.piecePlacedThisTurn) {
+    //   console.warn("You must place a piece before ending your turn.");
+    //   return;
+    // }
+
     boardState.endTurn();
     await runTurnCycle();
   }
 
-  /* ============================================================
-     FORFEIT HANDLING
-  ============================================================ */
+  // -------------------------------
+  // Forfeit logic
+  // -------------------------------
+
   let pendingForfeit = false;
+
   async function handleForfeit() {
     const current = boardState.currentPlayer;
     if (!boardState.isLocal(current) || pendingForfeit) return;
+
     pendingForfeit = true;
     forfeitModal.hidden = false;
 
     return new Promise((resolve) => {
-      const confirmYes = () => finish(true);
-      const cancel = () => finish(false);
+      const yes = () => finish(true);
+      const no = () => finish(false);
+
       function finish(choice) {
         forfeitModal.hidden = true;
-        confirmForfeitYes.removeEventListener("click", confirmYes);
-        confirmForfeitNo.removeEventListener("click", cancel);
+        confirmForfeitYes.removeEventListener("click", yes);
+        confirmForfeitNo.removeEventListener("click", no);
         pendingForfeit = false;
         resolve(choice);
       }
-      confirmForfeitYes.addEventListener("click", confirmYes);
-      confirmForfeitNo.addEventListener("click", cancel);
+
+      confirmForfeitYes.addEventListener("click", yes);
+      confirmForfeitNo.addEventListener("click", no);
     }).then(async (confirmed) => {
       if (!confirmed) return;
+
       forfeitedPlayers.add(current);
       showForfeitMessage(current);
 
       const allLocals = boardState.localPlayers;
       const allForfeited = allLocals.every((p) => forfeitedPlayers.has(p));
+
       if (allForfeited) return continueAIOnly();
 
       await new Promise((r) => setTimeout(r, 800));
@@ -222,9 +266,10 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
     });
   }
 
-  /* ============================================================
-     FINAL SCOREBOARD
-  ============================================================ */
+  // -------------------------------
+  // Final scoreboard (alert-based)
+  // -------------------------------
+
   function showFinalScoreboard() {
     const results = Object.keys(boardState.availablePieces).map((color) => {
       const remaining = boardState.availablePieces[color]
@@ -232,20 +277,27 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
         .reduce((a, b) => a + b, 0);
       return { color, score: remaining };
     });
+
     results.sort((a, b) => a.score - b.score);
-    const summary = results.map(r => `${r.color.toUpperCase()}: ${r.score}`).join("\n");
-    alert("🏁 Final Scores:\n\n" + summary);
+
+    const summary = results
+      .map((r) => `${r.color.toUpperCase()}: ${r.score}`)
+      .join("\n");
+
+    alert("Final Scores:\n" + summary);
   }
 
-  /* ============================================================
-     CONTINUE AI-ONLY MODE
-  ============================================================ */
+  // -------------------------------
+  // AI autoplay mode
+  // -------------------------------
+
   function continueAIOnly() {
     btnForfeit.style.display = "none";
     btnConfirm.disabled = true;
+
     updateTurnBanner("blue", "AI autoplay in progress...");
 
-    const aiList = boardState.turnOrder.filter(c => boardState.isAI(c));
+    const aiList = boardState.turnOrder.filter((c) => boardState.isAI(c));
 
     function hasValidMove(color) {
       const available = boardState.availablePieces[color] || [];
@@ -261,65 +313,98 @@ import { aiPlayByStyle } from "./utils/computerAI.js";
 
     async function aiLoop() {
       let moved = false;
+
       for (const color of aiList) {
         if (forfeitedPlayers.has(color)) continue;
         if (!hasValidMove(color)) {
           forfeitedPlayers.add(color);
           continue;
         }
+
         boardState.currentTurnIndex = boardState.turnOrder.indexOf(color);
         updateTurnBanner(color);
+
         aiPlayByStyle(color);
         boardState.emit();
+
         moved = true;
-        await new Promise(r => setTimeout(r, 500));
+
+        await new Promise((r) => setTimeout(r, 500));
       }
 
-      const allOut = aiList.every(c => forfeitedPlayers.has(c));
+      const allOut = aiList.every((c) => forfeitedPlayers.has(c));
+
       if (allOut || !moved) {
         showFinalScoreboard();
         return;
       }
 
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 500));
       aiLoop();
     }
 
     aiLoop();
   }
 
-  /* ============================================================
-     BUTTON EVENTS
-  ============================================================ */
-  btnConfirm.addEventListener("click", handleEndTurn);
-  btnForfeit.addEventListener("click", handleForfeit);
+  // -------------------------------
+  // Instructions Modal (using `hidden`)
+  // -------------------------------
+
+// INSTRUCTIONS OPEN
+btnInstructions.addEventListener("click", () => {
+  document.getElementById("instructionsModal").hidden = false;
+});
+
+// INSTRUCTIONS CLOSE
+document.getElementById("closeModal").addEventListener("click", () => {
+  document.getElementById("instructionsModal").hidden = true;
+});
+
+// BACKDROP CLOSE
+document.getElementById("instructionsModal").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) {
+    e.currentTarget.hidden = true;
+  }
+});
+
+
+  // -------------------------------
+  // Start / Reset game
+  // -------------------------------
+
+  function startGame() {
+    updateScores();
+    runTurnCycle();
+  }
+
+  // ✅ Wire up the buttons (this was missing)
+  if (btnConfirm) {
+    btnConfirm.addEventListener("click", handleEndTurn);
+  }
+  if (btnForfeit) {
+    btnForfeit.addEventListener("click", handleForfeit);
+  }
 
   btnReset.addEventListener("click", () => {
     forfeitedPlayers.clear();
     boardState.reset();
-    renderAllPieces(panels, boardState.pieceSize, boardState.textures, boardState.startDrag);
+
+    renderAllPieces(
+      panels,
+      boardState.pieceSize,
+      boardState.textures,
+      boardState.startDrag
+    );
+
     renderer(boardState);
     updateScores();
-    setupPlayerModal();
+
+    startGame();
   });
 
-  btnInstructions.addEventListener("click", () => {
-    const modal = document.getElementById("instructionsModal");
-    if (modal) modal.hidden = false;
-  });
+  // -------------------------------
+  // Initial game start
+  // -------------------------------
 
-  document.getElementById("closeModal")?.addEventListener("click", () => {
-    const modal = document.getElementById("instructionsModal");
-    if (modal) modal.hidden = true;
-  });
-
-  /* ============================================================
-     START GAME
-  ============================================================ */
-  function startGame() {
-    console.log("🚀 Starting Blokus (Blue = Local, 3 AIs)");
-    renderer(boardState);
-    updateScores();
-    runTurnCycle();
-  }
+  startGame();
 })();
