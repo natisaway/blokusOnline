@@ -12,7 +12,7 @@
   <div id="turnBanner" class="turn-banner hidden">
     <div class="turn-banner-main">
       <span id="turnBannerText"></span><br />
-      <small id="turnBannerSub">Press Enter when done</small>
+      <small id="turnBannerSub">Click "End Turn" when done</small>
     </div>
   </div>
 
@@ -43,27 +43,27 @@
   <!-- ===== Bottom Green Panel ===== -->
   <div id="green-panel" class="panel strip strip--green"></div>
 
-<!-- ===== Control Buttons ===== -->
-<div class="button-container">
-  <button id="resetBtn">Reset Board</button>
-  <button id="instructionsBtn">Instructions</button>
-  <button id="forfeitBtn" class="confirm-btn">Forfeit Turn</button>
-  <button id="confirmTurnBtn" class="confirm-btn">End Turn</button>
-</div>
-
+  <!-- ===== Control Buttons ===== -->
+  <div class="button-container">
+    <button id="resetBtn">Reset Board</button>
+    <button id="instructionsBtn">Instructions</button>
+    <button id="forfeitBtn" class="confirm-btn">Forfeit Turn</button>
+    <button id="confirmTurnBtn" class="confirm-btn">End Turn</button>
+  </div>
 
   <!-- ===== Instructions Modal ===== -->
-  <div id="instructionsModal" class="modal" aria-hidden="true">
+<div id="instructionsModal" class="modal" hidden>
     <div class="modal-content">
-      <span id="closeModal" class="close" aria-label="Close Instructions">&times;</span>
+      <span id="closeModal" class="close">&times;</span>
       <h2>Game Instructions</h2>
-      <p>
-        - Drag and drop pieces<br /><br />
-        - R to rotate a piece<br /><br />
-        - F to flip a piece horizontally<br /><br />
-        - V to flip a piece vertically<br /><br />
-        - Hold a piece and press Delete to return it to your pile<br /><br />
-      </p>
+<p>
+  • Game starts with each player placing a piece touching their own corner square.<br><br>
+  • Drag and drop pieces onto the board.<br><br>
+  • <strong>R</strong> — Rotate the selected piece<br>
+  • <strong>F</strong> — Flip a piece horizontally<br>
+  • <strong>V</strong> — Flip a piece vertically.<br><br>
+  • To return a piece: drag it back into your panel<br><br>
+</p>
       <a href="https://service.mattel.com/instruction_sheets/BJV44-Eng.pdf"
          target="_blank"
          rel="noopener noreferrer">
@@ -73,25 +73,40 @@
   </div>
 
   <!-- ===== Forfeit Confirmation Modal ===== -->
-<div id="forfeitModal" class="player-select-modal" hidden>
-  <div class="player-select-content">
-    <h2>Forfeit Turn?</h2>
-    <p style="margin-bottom:16px;">Are you sure you want to forfeit your turn?<br/>You won’t be able to play again this game.</p>
-    <div class="player-buttons">
-      <button id="confirmForfeitYes">Yes, Forfeit</button>
-      <button id="confirmForfeitNo">Cancel</button>
+  <div id="forfeitModal" class="player-select-modal" hidden>
+    <div class="player-select-content">
+      <h2>Forfeit Turn?</h2>
+      <p style="margin-bottom:16px;">Are you sure you want to forfeit your turn?<br/>You won’t be able to play again this game.</p>
+      <div class="player-buttons">
+        <button id="confirmForfeitYes">Yes, Forfeit</button>
+        <button id="confirmForfeitNo">Cancel</button>
+      </div>
     </div>
   </div>
-</div>
 
-
-<!-- ===== Score Counter ===== -->
-<div id="scoreBoard" class="score-board">
-  <div class="score blue-score">Blue: <span id="blueScore">89</span> squares left</div>
-  <div class="score yellow-score">Yellow: <span id="yellowScore">89</span> squares left</div>
-  <div class="score red-score">Red: <span id="redScore">89</span> squares left</div>
-  <div class="score green-score">Green: <span id="greenScore">89</span> squares left</div>
-</div>
+  <!-- ===== Score Counter ===== -->
+  <div id="scoreBoard" class="scoreboard">
+    <div class="score-item blue">
+      <div class="score-label">Blue</div>
+      <div class="score-value" id="blueScore">89</div>
+      <div class="score-sub">squares left</div>
+    </div>
+    <div class="score-item yellow">
+      <div class="score-label">Yellow</div>
+      <div class="score-value" id="yellowScore">89</div>
+      <div class="score-sub">squares left</div>
+    </div>
+    <div class="score-item red">
+      <div class="score-label">Red</div>
+      <div class="score-value" id="redScore">89</div>
+      <div class="score-sub">squares left</div>
+    </div>
+    <div class="score-item green">
+      <div class="score-label">Green</div>
+      <div class="score-value" id="greenScore">89</div>
+      <div class="score-sub">squares left</div>
+    </div>
+  </div>
 
   <script type="module" src="./src/main.js"></script>
 </body>
