@@ -1,17 +1,17 @@
-// src/input/dragDrop.js
 import { BOARD_SIZE } from "../constants.js";
 import { boardState } from "../state/boardState.js";
 import { normalize } from "../utils/geometry.js";
 
-/* ---------------- helpers ---------------- */
+/* convert screen (client) coordinates to board grid coordinates */
 function clientToGrid(clientX, clientY, wrapperEl, cellSize, mouseOffset) {
   const rect = wrapperEl.getBoundingClientRect();
-  const x = Math.floor((clientX - rect.left - mouseOffset.x) / cellSize);
-  const y = Math.floor((clientY - rect.top - mouseOffset.y) / cellSize);
+  const x = Math.round((clientX - rect.left - mouseOffset.x) / cellSize);
+  const y = Math.round((clientY - rect.top - mouseOffset.y) / cellSize);
   return { x, y };
 }
 
 let rafPending = false;
+/* state updates to animation frames */
 function scheduleEmit() {
   if (rafPending) return;
   rafPending = true;
@@ -21,7 +21,7 @@ function scheduleEmit() {
   });
 }
 
-/* ---------------- preview updater ---------------- */
+/* update drag preview position + validity */
 function updatePreview(clientX, clientY) {
   const dp = boardState.draggingPiece;
   if (!dp) {
@@ -39,6 +39,7 @@ function updatePreview(clientX, clientY) {
     boardState.mouseOffset
   );
 
+  /* clamp to safe drag bounds around board */
   origin.x = Math.max(-10, Math.min(BOARD_SIZE + 10, origin.x));
   origin.y = Math.max(-10, Math.min(BOARD_SIZE + 10, origin.y));
 
@@ -47,7 +48,7 @@ function updatePreview(clientX, clientY) {
   scheduleEmit();
 }
 
-/* ---------------- cleanup / auto-return ---------------- */
+/* return piece to player's piece pool if the drop fails */
 function autoReturnPiece() {
   const dp = boardState.draggingPiece;
   if (!dp) return;
@@ -60,12 +61,13 @@ function autoReturnPiece() {
   }
 }
 
+/* reset drag state and event listeners */
 function cleanup(returnToPanel = false) {
   const boardCanvas = document.getElementById("board");
-
   window.removeEventListener("mousemove", onMouseMove);
+  window.removeEventListener("mouseup", onMouseUp);
   window.removeEventListener("touchmove", onTouchMove);
-  boardCanvas?.removeEventListener("click", onBoardClick);
+  window.removeEventListener("touchend", onTouchEnd);
 
   document.body.classList.remove("dragging");
   if (boardCanvas) {
@@ -86,7 +88,7 @@ function cleanup(returnToPanel = false) {
   boardState.emit?.();
 }
 
-/* ---------------- pointer handlers ---------------- */
+/* mouse drag movement handler */
 function onMouseMove(e) {
   e.preventDefault();
   const dp = boardState.draggingPiece;
@@ -95,6 +97,7 @@ function onMouseMove(e) {
   updatePreview(e.clientX, e.clientY);
 }
 
+/* touch drag movement handler */
 function onTouchMove(e) {
   const t = e.touches[0];
   if (!t) return;
@@ -104,26 +107,70 @@ function onTouchMove(e) {
   updatePreview(t.clientX, t.clientY);
 }
 
-/* Click-to-place */
-function onBoardClick(e) {
+/* attempt to place the piece at the target position */
+function handleDrop(x, y) {
+  const dp = boardState.draggingPiece;
+  if (!dp) return false;
+
+  const origin = { x, y };
+  const can = boardState.canPlace(dp.shape, origin);
+  if (!can) {
+    cleanup(true);
+    return false;
+  }
+
+  const placed = boardState.dropAt(origin.x, origin.y, dp.shape, dp.imageObj);
+  cleanup(!placed);
+  return placed;
+}
+
+/* mouse drop handler
+   ✅ Uses the last preview position so mouse can be off the board */
+function onMouseUp(e) {
   const dp = boardState.draggingPiece;
   if (!dp) return;
+
+  if (boardState.previewOrigin) {
+    // Drop where the ghost/preview currently is
+    handleDrop(boardState.previewOrigin.x, boardState.previewOrigin.y);
+  } else {
+    // Fallback: compute from mouse position
+    const origin = clientToGrid(
+      e.clientX,
+      e.clientY,
+      dp.wrapperEl,
+      boardState.cellSize,
+      boardState.mouseOffset
+    );
+    handleDrop(origin.x, origin.y);
+  }
+}
+
+/* touch drop handler
+   ✅ Also uses the last preview position */
+function onTouchEnd(e) {
+  const dp = boardState.draggingPiece;
+  if (!dp) return;
+
+  if (boardState.previewOrigin) {
+    handleDrop(boardState.previewOrigin.x, boardState.previewOrigin.y);
+    return;
+  }
+
+  const touch = e.changedTouches[0];
+  if (!touch) return;
+
   const origin = clientToGrid(
-    e.clientX,
-    e.clientY,
+    touch.clientX,
+    touch.clientY,
     dp.wrapperEl,
     boardState.cellSize,
     boardState.mouseOffset
   );
-  const can = boardState.canPlace(dp.shape, origin);
-
-  if (!can) return cleanup(true);
-  const placed = boardState.dropAt(origin.x, origin.y, dp.shape, dp.imageObj);
-  if (placed) cleanup(false);
-  else cleanup(true);
+  handleDrop(origin.x, origin.y);
 }
 
-/* =================== DRAG ENTRY =================== */
+/* begin dragging a piece from panel or board */
 boardState.startDrag = function startDrag(
   piece,
   clientX,
@@ -134,26 +181,38 @@ boardState.startDrag = function startDrag(
 ) {
   const color = piece.color;
   const src = piece.source || "panel";
+  piece.fromReposition = src === "board";
 
-  // ✅ Allow only the current local player's pieces
-  if (src === "panel" && (!boardState.isLocal(color) || color !== boardState.currentPlayer)) {
-    console.log(`⛔ Cannot drag ${color} piece — not current local player`);
+  /* only allow dragging own piece on own turn */
+  if (
+    src === "panel" &&
+    (!boardState.isLocal(color) || color !== boardState.currentPlayer)
+  ) {
+    console.log(`Cannot drag ${color} piece — not current local player`);
     return;
   }
 
-  // ✅ Prevent dragging during locked states (if any)
+  if (boardState.draggingPiece) {
+    console.log("Already dragging a piece — drop or cancel first");
+    return;
+  }
+
+  /* prevent drag if turn is locked */
   if (src === "panel" && boardState.turnLocked) return;
 
-  // ✅ Remove the piece from its list (so it disappears while dragging)
+  /* remove piece from panel list if dragging from panel */
   if (src === "panel") {
     const arr = boardState.availablePieces[color];
-    const idx = arr.findIndex((p) => JSON.stringify(p) === JSON.stringify(piece.shape));
+    const idx = arr.findIndex(
+      (p) => JSON.stringify(p) === JSON.stringify(piece.shape)
+    );
     if (idx !== -1) arr.splice(idx, 1);
   }
 
   const boardCanvas = document.getElementById("board");
   const clonedShape = JSON.parse(JSON.stringify(piece.shape));
 
+  /* create drag state object */
   boardState.draggingPiece = {
     ...piece,
     shape: clonedShape,
@@ -170,23 +229,20 @@ boardState.startDrag = function startDrag(
 
   updatePreview(clientX, clientY);
 
+  /* attach temporary drag listeners */
   window.addEventListener("mousemove", onMouseMove, { passive: false });
+  window.addEventListener("mouseup", onMouseUp, { passive: false });
   window.addEventListener("touchmove", onTouchMove, { passive: false });
-  boardCanvas.addEventListener("click", onBoardClick, { passive: false });
+  window.addEventListener("touchend", onTouchEnd, { passive: false });
 
   document.body.classList.add("dragging");
   boardCanvas.classList.add("dragging");
   boardCanvas.style.cursor = "grabbing";
 
-  // ✅ Trigger re-render (piece disappears from panel)
   boardState.emit?.();
 };
 
-boardState.cancelDrag = function cancelDrag() {
-  cleanup(true);
-};
-
-/* ================= Canvas wiring ================= */
+/* enable picking up pieces from the board */
 export function attachBoardPickup(canvasEl) {
   canvasEl.addEventListener("mousedown", (e) => {
     if (boardState.draggingPiece) return;
@@ -200,6 +256,7 @@ export function attachBoardPickup(canvasEl) {
 
     const offsetX = e.clientX - (rect.left + gx * cell);
     const offsetY = e.clientY - (rect.top + gy * cell);
+
     boardState.startDrag(
       { ...picked, source: "board" },
       e.clientX,
@@ -210,6 +267,7 @@ export function attachBoardPickup(canvasEl) {
   });
 }
 
+/* attach all canvas input handlers */
 export function attachCanvasInput(canvasEl) {
   attachBoardPickup(canvasEl);
 }
