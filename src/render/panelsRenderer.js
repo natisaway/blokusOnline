@@ -1,4 +1,3 @@
-// src/render/panelsRenderer.js
 import { boardState } from "../state/boardState.js";
 
 export function renderAllPieces(panels, pieceSize, textures = {}, startDrag = () => {}) {

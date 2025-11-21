@@ -1,7 +1,6 @@
-// src/layout/responsive.js
 import { SHRINK_PERCENT } from "../constants.js";
 
-// Layout tuning (keep in sync with CSS)
+// layout 
 const MAX_COLS_PER_PIECE = 5;
 const MAX_ROWS_PER_PIECE = 5;
 const PANEL_TO_CELL = 0.82;
@@ -9,9 +8,7 @@ const MID_GAP = 24;
 const COL_GAP = 10;
 const ROW_GAP = 12;
 
-/**
- * Computes the best piece size based on target width, height, and board cell.
- */
+/* computes the best piece size based on target width, height, and board cell */
 function pieceSizeForGrid(targetW, targetH, cell) {
   const byBoard = cell * PANEL_TO_CELL;
   const byWidth = (targetW - COL_GAP * 6) / (7 * MAX_COLS_PER_PIECE);
@@ -19,10 +16,7 @@ function pieceSizeForGrid(targetW, targetH, cell) {
   return Math.max(8, Math.min(byBoard, byWidth, byHeight));
 }
 
-/**
- * Responsive layout computation for board + panels.
- * Safe even if some arguments are missing (avoids destructure crashes).
- */
+/* responsive layout computation for board + panels */
 export function solveLayout(
   canvas,
   panels = {},
@@ -98,13 +92,13 @@ export function solveLayout(
       metrics: { sideW: 220, sideH: lo, stripH: 110 },
     };
 
-  // Apply to canvas
+  // apply to canvas
   canvas.width = pack.boardSize;
   canvas.height = pack.boardSize;
   canvas.style.width = `${pack.boardSize}px`;
   canvas.style.height = `${pack.boardSize}px`;
 
-  // CSS variables
+  // css variables
   const root = document.documentElement.style;
   root.setProperty("--sideW", `${Math.round(pack.metrics.sideW)}px`);
   root.setProperty("--stripH", `${Math.round(pack.metrics.stripH)}px`);

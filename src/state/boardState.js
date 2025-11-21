@@ -1,9 +1,7 @@
-// src/state/boardState.js
 import { BOARD_SIZE } from "../constants.js";
 import { BASE_PIECES } from "../pieces.js";
 import { isValidPlacement } from "./boardRules.js";
 
-/* ---------------- subscription bus ---------------- */
 const listeners = new Set();
 export function subscribe(fn) {
   listeners.add(fn);
@@ -11,11 +9,13 @@ export function subscribe(fn) {
 }
 function emit() {
   for (const fn of listeners) {
-    try { fn(); } catch {}
+    try {
+      fn();
+    } catch {}
   }
 }
 
-/* ---------------- helpers ---------------- */
+/* =========================== HELPERS =========================== */
 function normalize(shape) {
   const xs = shape.map(([x]) => x);
   const ys = shape.map(([, y]) => y);
@@ -25,13 +25,6 @@ function normalize(shape) {
 }
 function cloneShape(shape) {
   return shape.map(([x, y]) => [x, y]);
-}
-function shuffleArray(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
 }
 
 /* =========================== STATE =========================== */
@@ -55,6 +48,9 @@ export const boardState = {
   previewOrigin: null,
   previewValid: false,
 
+  /* per-turn placement tracking */
+  piecePlacedThisTurn: false,
+
   /* turn flow */
   turnOrder: ["blue", "yellow", "red", "green"],
   currentTurnIndex: 0,
@@ -62,40 +58,21 @@ export const boardState = {
     return this.turnOrder[this.currentTurnIndex];
   },
 
-  /* PLAYER MODES ---------------------------- */
+  /* =========================== PLAYER MODES =========================== */
   localPlayers: ["blue"],
 
-  /** returns true if given color is controlled locally */
   isLocal(color) {
     return this.localPlayers.includes(color);
   },
-
-  /** returns true if given color is AI controlled */
   isAI(color) {
     return !this.localPlayers.includes(color);
   },
-
-  /** toggle a color between local/AI manually */
   togglePlayerMode(color) {
     if (this.isLocal(color)) {
       this.localPlayers = this.localPlayers.filter((c) => c !== color);
     } else {
       this.localPlayers.push(color);
     }
-    console.log(`Toggled ${color}:`, this.isLocal(color) ? "LOCAL" : "AI");
-    emit();
-  },
-
-  /** ✅ set number of local players (1–4)
-   * preserves order: blue → yellow → red → green */
-  setLocalPlayers(count = 1) {
-    const order = ["blue", "yellow", "red", "green"];
-    this.localPlayers = order.slice(0, Math.min(4, Math.max(1, count)));
-    console.log(
-      `🎮 Local players: ${this.localPlayers.join(", ")} | AIs: ${order
-        .filter((c) => !this.localPlayers.includes(c))
-        .join(", ")}`
-    );
     emit();
   },
 
@@ -107,7 +84,7 @@ export const boardState = {
     blue: { x: BOARD_SIZE - 1, y: BOARD_SIZE - 1 },
   },
 
-  /* ---------------- placement ---------------- */
+  /* =========================== PLACEMENT =========================== */
   canPlace(shape, origin, colorOverride = null) {
     const color = colorOverride || this.currentPlayer;
     const tiles = shape.map(([x, y]) => ({ x, y }));
@@ -133,10 +110,30 @@ export const boardState = {
 
   dropAt(x, y, shape, imageObj) {
     const color = this.currentPlayer;
+
+    /* prevents multiple piece placement, but allows repositioning of piece on board */
+    if (
+      this.isLocal(color) &&
+      this.piecePlacedThisTurn &&
+      !this.draggingPiece?.fromReposition
+    ) {
+      console.log(`${color} already finalized a piece this turn.`);
+      return false;
+    }
+
     const origin = { x, y };
     if (!this.canPlace(shape, origin, color)) return false;
 
-    const usedImage = imageObj || this.draggingPiece?.imageObj || this.textures[color];
+    const usedImage =
+      imageObj || this.draggingPiece?.imageObj || this.textures[color];
+
+    /* allow repositioning and remove previous unfinalized piece */
+    if (this.isLocal(color) && this.piecePlacedThisTurn) {
+      const lastIndex = this.placedPieces.findIndex(
+        (p) => p.color === color && !p.finalized
+      );
+      if (lastIndex !== -1) this.placedPieces.splice(lastIndex, 1);
+    }
 
     this.placedPieces.push({
       shape: cloneShape(shape),
@@ -146,10 +143,16 @@ export const boardState = {
       rotation: this.draggingPiece?.rotation || 0,
       flippedH: this.draggingPiece?.flippedH || false,
       flippedV: this.draggingPiece?.flippedV || false,
+      finalized: false,
     });
 
     this.markPieceUsed(color, shape);
     this.resetDragTransform(this.draggingPiece);
+
+    if (this.isLocal(color)) {
+      this.piecePlacedThisTurn = true;
+    }
+
     emit();
     return true;
   },
@@ -161,28 +164,48 @@ export const boardState = {
     if (idx !== -1) this.availablePieces[color].splice(idx, 1);
   },
 
-  /* ---------------- pickup ---------------- */
+  /* =========================== PICKUP =========================== */
   pickUpAt(gx, gy) {
     for (let i = this.placedPieces.length - 1; i >= 0; i--) {
       const p = this.placedPieces[i];
+
+      /* check if grid position overlaps any tile in this piece */
       for (const [dx, dy] of p.shape) {
         if (p.origin.x + dx === gx && p.origin.y + dy === gy) {
+          /* only allow pickup by the player whose turn it is */
+          if (p.color !== this.currentPlayer) return null;
+
+          /* don't allow pickup after finalized move */
+          if (p.finalized) return null;
+
+          /* remove it from board to allow repositioning */
           this.placedPieces.splice(i, 1);
-          emit();
-          return { ...p, shape: normalize(p.shape) };
+          this.piecePlacedThisTurn = false; // allow dropping again this turn
+          this.emit();
+
+          /* return a draggable version of the same piece */
+return { ...p, shape: normalize(p.shape), source: "board", fromReposition: true };
         }
       }
     }
     return null;
   },
 
-  /* ---------------- turn flow ---------------- */
+  /* =========================== TURN FLOW =========================== */
   endTurn() {
-    this.currentTurnIndex = (this.currentTurnIndex + 1) % this.turnOrder.length;
+    /* lock any unfinalized pieces for this player */
+    const color = this.currentPlayer;
+    for (const p of this.placedPieces) {
+      if (p.color === color) p.finalized = true;
+    }
+
+    this.piecePlacedThisTurn = false;
+    this.currentTurnIndex =
+      (this.currentTurnIndex + 1) % this.turnOrder.length;
     emit();
   },
 
-  /* ---------------- reset ---------------- */
+  /* =========================== RESET =========================== */
   reset() {
     const copy = (arr) => JSON.parse(JSON.stringify(arr));
     this.availablePieces = {
@@ -191,11 +214,13 @@ export const boardState = {
       blue: copy(BASE_PIECES).map(normalize),
       green: copy(BASE_PIECES).map(normalize),
     };
-    Object.keys(this.availablePieces).forEach((c) => shuffleArray(this.availablePieces[c]));
-
+    Object.keys(this.availablePieces).forEach((c) =>
+      this.availablePieces[c].sort(() => Math.random() - 0.5)
+    );
     this.placedPieces = [];
     this.currentTurnIndex = 0;
-    // 🔹 Do NOT overwrite localPlayers (keep user selection)
+    this.localPlayers = ["blue"];
+    this.piecePlacedThisTurn = false;
     this.resetDragTransform();
     emit();
   },
